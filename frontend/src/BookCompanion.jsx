@@ -49,9 +49,9 @@ const BookCompanion = () => {
 
     // Check if this is a magic link verification
     const urlParams = new URLSearchParams(window.location.search);
-    const token = urlParams.get('token');
-    if (token) {
-      verifyMagicLink(token);
+    const magicLinkToken = urlParams.get('token');
+    if (magicLinkToken) {
+      verifyMagicLink(magicLinkToken);
     }
   }, []);
 
