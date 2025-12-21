@@ -1,23 +1,256 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { BookOpen, Sparkles, Send, Loader2, User, Download, Upload } from 'lucide-react';
+import { BookOpen, Sparkles, Send, Loader2, User, Download, Upload, Search, MessageSquare, LogOut, Mail, Save, History } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
 const BookCompanion = () => {
+  // Authentication state
+  const [user, setUser] = useState(null);
+  const [authToken, setAuthToken] = useState(localStorage.getItem('authToken'));
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authEmail, setAuthEmail] = useState('');
+  const [authStatus, setAuthStatus] = useState('idle'); // 'idle' | 'sending' | 'sent' | 'verifying'
+
+  // Conversation state
   const [bookTitle, setBookTitle] = useState('');
   const [bookAuthor, setBookAuthor] = useState('');
-  const [currentPage, setCurrentPage] = useState('');
   const [conversation, setConversation] = useState([]);
+  const [conversationId, setConversationId] = useState(null);
+  const [savedConversations, setSavedConversations] = useState([]);
+  const [showHistory, setShowHistory] = useState(false);
+
+  // UI state
   const [userInput, setUserInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [authorKnowledge, setAuthorKnowledge] = useState(null);
   const [isLoadingAuthor, setIsLoadingAuthor] = useState(false);
+  const [researchStatus, setResearchStatus] = useState([]);
+  const [questionStarters, setQuestionStarters] = useState([]);
+
   const conversationEndRef = useRef(null);
   const fileInputRef = useRef(null);
+
+  // Check for token on mount and verify magic link
+  useEffect(() => {
+    const token = localStorage.getItem('authToken');
+    if (token) {
+      setAuthToken(token);
+      // Decode token to get user info (simple decode, not verification)
+      try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        setUser({ id: payload.userId, email: payload.email });
+      } catch (error) {
+        console.error('Invalid token:', error);
+        localStorage.removeItem('authToken');
+      }
+    }
+
+    // Check if this is a magic link verification
+    const urlParams = new URLSearchParams(window.location.search);
+    const token = urlParams.get('token');
+    if (token) {
+      verifyMagicLink(token);
+    }
+  }, []);
+
+  // Load conversations when user logs in
+  useEffect(() => {
+    if (user && authToken) {
+      fetchConversations();
+    }
+  }, [user, authToken]);
 
   useEffect(() => {
     conversationEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [conversation]);
+
+  // Authentication functions
+  const sendMagicLink = async (e) => {
+    e.preventDefault();
+    setAuthStatus('sending');
+
+    try {
+      const response = await fetch(`${API_URL}/api/auth/send-magic-link`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: authEmail }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to send magic link');
+      }
+
+      setAuthStatus('sent');
+    } catch (error) {
+      console.error('Error sending magic link:', error);
+      alert('Failed to send magic link. Please try again.');
+      setAuthStatus('idle');
+    }
+  };
+
+  const verifyMagicLink = async (token) => {
+    setAuthStatus('verifying');
+
+    try {
+      const response = await fetch(`${API_URL}/api/auth/verify/${token}`);
+
+      if (!response.ok) {
+        throw new Error('Invalid or expired magic link');
+      }
+
+      const data = await response.json();
+
+      // Store token and user info
+      localStorage.setItem('authToken', data.token);
+      setAuthToken(data.token);
+      setUser(data.user);
+      setShowAuthModal(false);
+      setAuthStatus('idle');
+
+      // Clear URL parameter
+      window.history.replaceState({}, document.title, window.location.pathname);
+
+      alert(`Welcome back, ${data.user.email}!`);
+    } catch (error) {
+      console.error('Error verifying magic link:', error);
+      alert('Invalid or expired magic link. Please try logging in again.');
+      setAuthStatus('idle');
+    }
+  };
+
+  const logout = () => {
+    localStorage.removeItem('authToken');
+    setAuthToken(null);
+    setUser(null);
+    setSavedConversations([]);
+    setConversation([]);
+    setAuthorKnowledge(null);
+    setConversationId(null);
+    setBookTitle('');
+    setBookAuthor('');
+  };
+
+  const getAuthHeaders = () => {
+    return authToken ? { 'Authorization': `Bearer ${authToken}` } : {};
+  };
+
+  // Conversation management functions
+  const fetchConversations = async () => {
+    try {
+      const response = await fetch(`${API_URL}/api/conversations`, {
+        headers: getAuthHeaders(),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch conversations');
+      }
+
+      const data = await response.json();
+      setSavedConversations(data.conversations || []);
+    } catch (error) {
+      console.error('Error fetching conversations:', error);
+    }
+  };
+
+  const saveConversation = async () => {
+    if (!user || !authToken) {
+      alert('Please log in to save conversations');
+      setShowAuthModal(true);
+      return;
+    }
+
+    if (!bookTitle || !authorKnowledge || conversation.length === 0) {
+      alert('Start a conversation before saving');
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_URL}/api/conversations`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders(),
+        },
+        body: JSON.stringify({
+          conversationId,
+          bookTitle,
+          bookAuthor,
+          authorKnowledge,
+          messages: conversation,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to save conversation');
+      }
+
+      const data = await response.json();
+      setConversationId(data.conversation.id);
+      fetchConversations(); // Refresh list
+      alert('Conversation saved!');
+    } catch (error) {
+      console.error('Error saving conversation:', error);
+      alert('Failed to save conversation. Please try again.');
+    }
+  };
+
+  const loadConversation = async (id) => {
+    try {
+      const response = await fetch(`${API_URL}/api/conversations/${id}`, {
+        headers: getAuthHeaders(),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to load conversation');
+      }
+
+      const data = await response.json();
+      const conv = data.conversation;
+
+      setBookTitle(conv.book_title);
+      setBookAuthor(conv.book_author);
+      setAuthorKnowledge(conv.author_knowledge);
+      setConversation(conv.messages.map(m => ({ role: m.role, content: m.content })));
+      setConversationId(conv.id);
+      setShowHistory(false);
+    } catch (error) {
+      console.error('Error loading conversation:', error);
+      alert('Failed to load conversation');
+    }
+  };
+
+  const deleteConversation = async (id) => {
+    if (!confirm('Are you sure you want to delete this conversation?')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_URL}/api/conversations/${id}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders(),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to delete conversation');
+      }
+
+      fetchConversations(); // Refresh list
+
+      if (conversationId === id) {
+        // Clear current conversation if it was deleted
+        setConversation([]);
+        setAuthorKnowledge(null);
+        setConversationId(null);
+        setBookTitle('');
+        setBookAuthor('');
+      }
+    } catch (error) {
+      console.error('Error deleting conversation:', error);
+      alert('Failed to delete conversation');
+    }
+  };
 
   const loadAuthorKnowledge = async () => {
     if (!bookTitle.trim()) {
@@ -26,12 +259,8 @@ const BookCompanion = () => {
     }
 
     setIsLoadingAuthor(true);
-
-    // Safety timeout - force reset after 60 seconds
-    const timeout = setTimeout(() => {
-      setIsLoadingAuthor(false);
-      alert('Request timed out. Please check your connection and try again.');
-    }, 60000);
+    setResearchStatus(['Starting research...']);
+    setQuestionStarters([]);
 
     try {
       const response = await fetch(`${API_URL}/api/load-author`, {
@@ -49,27 +278,56 @@ const BookCompanion = () => {
         throw new Error(`API request failed: ${response.status}`);
       }
 
-      const data = await response.json();
-      console.log('API Response:', data);
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
 
-      setAuthorKnowledge(data.knowledge);
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
 
-      // Start with author's greeting
-      try {
-        const greeting = await getAuthorGreeting(data.knowledge);
-        setConversation([{ role: 'assistant', content: greeting }]);
-      } catch (greetingError) {
-        console.error('Greeting failed, using default:', greetingError);
-        // Use default greeting if the API call fails
-        setConversation([{
-          role: 'assistant',
-          content: `Hello! I'm ${bookAuthor}, and I'm delighted to discuss "${bookTitle}" with you. What would you like to explore together?`
-        }]);
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split('\n');
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+
+              if (data.status) {
+                setResearchStatus(prev => [...prev, data.status]);
+              }
+
+              if (data.done) {
+                setAuthorKnowledge(data.knowledge);
+                if (data.questionStarters) {
+                  setQuestionStarters(data.questionStarters);
+                }
+
+                // Start with author's greeting
+                try {
+                  const greeting = await getAuthorGreeting(data.knowledge);
+                  setConversation([{ role: 'assistant', content: greeting }]);
+                } catch (greetingError) {
+                  console.error('Greeting failed, using default:', greetingError);
+                  setConversation([{
+                    role: 'assistant',
+                    content: `Hello! I'm ${bookAuthor}, and I'm delighted to discuss "${bookTitle}" with you. What would you like to explore together?`
+                  }]);
+                }
+              }
+
+              if (data.error) {
+                throw new Error(data.error);
+              }
+            } catch (e) {
+              console.error('Error parsing research stream:', e);
+            }
+          }
+        }
       }
-      clearTimeout(timeout);
+
       setIsLoadingAuthor(false);
     } catch (error) {
-      clearTimeout(timeout);
       console.error('Error loading author knowledge:', error);
       alert(`Failed to load author information: ${error.message}. Please check that the backend is running on ${API_URL}`);
       setIsLoadingAuthor(false);
@@ -102,13 +360,14 @@ const BookCompanion = () => {
     }
   };
 
-  const sendMessage = async () => {
-    if (!userInput.trim() || isLoading) return;
+  const sendMessage = async (overrideInput = '') => {
+    const messageText = overrideInput || userInput;
+    if (!messageText.trim() || isLoading) return;
 
-    const userMessage = { role: 'user', content: userInput };
-    const newConversation = [...conversation, userMessage];
-    setConversation(newConversation);
-    setUserInput('');
+    const userMessage = { role: 'user', content: messageText };
+    const initialConversation = [...conversation, userMessage];
+    setConversation(initialConversation);
+    if (!overrideInput) setUserInput('');
     setIsLoading(true);
 
     try {
@@ -120,19 +379,52 @@ const BookCompanion = () => {
         body: JSON.stringify({
           bookTitle,
           bookAuthor,
-          currentPage,
           authorKnowledge,
-          conversation: newConversation,
+          conversation: initialConversation,
         }),
       });
 
-      const data = await response.json();
-      const aiResponse = data.response || 'I apologize, I had trouble responding. Could you try again?';
+      if (!response.ok) throw new Error('Failed to start stream');
 
-      setConversation([...newConversation, { role: 'assistant', content: aiResponse }]);
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let aiResponseText = '';
+
+      // Add a placeholder message for the AI
+      setConversation([...initialConversation, { role: 'assistant', content: '' }]);
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split('\n');
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const dataStr = line.slice(6);
+            if (dataStr === '[DONE]') break;
+
+            try {
+              const data = JSON.parse(dataStr);
+              if (data.text) {
+                aiResponseText += data.text;
+                // Update the last message in the conversation
+                setConversation(prev => {
+                  const updated = [...prev];
+                  updated[updated.length - 1] = { role: 'assistant', content: aiResponseText };
+                  return updated;
+                });
+              }
+            } catch (e) {
+              console.error('Error parsing stream chunk:', e);
+            }
+          }
+        }
+      }
     } catch (error) {
       console.error('API Error:', error);
-      setConversation([...newConversation, {
+      setConversation(prev => [...prev, {
         role: 'assistant',
         content: 'I apologize, something went wrong. Please try again.'
       }]);
@@ -153,7 +445,6 @@ const BookCompanion = () => {
     setAuthorKnowledge(null);
     setBookTitle('');
     setBookAuthor('');
-    setCurrentPage('');
   };
 
   const exportConversation = (format) => {
@@ -171,9 +462,6 @@ const BookCompanion = () => {
 
     if (format === 'markdown') {
       content = `# Conversation with ${bookAuthor}\n## About ${bookTitle}\n\n`;
-      if (currentPage) {
-        content += `Current Location: ${currentPage}\n\n`;
-      }
       content += `Date: ${new Date().toLocaleDateString()}\n\n---\n\n`;
 
       conversation.forEach((msg) => {
@@ -190,8 +478,7 @@ const BookCompanion = () => {
       const exportData = {
         book: {
           title: bookTitle,
-          author: bookAuthor,
-          currentPage: currentPage
+          author: bookAuthor
         },
         exportDate: new Date().toISOString(),
         conversation: conversation,
@@ -202,9 +489,6 @@ const BookCompanion = () => {
       mimeType = 'application/json';
     } else if (format === 'txt') {
       content = `Conversation with ${bookAuthor}\nAbout: ${bookTitle}\n`;
-      if (currentPage) {
-        content += `Current Location: ${currentPage}\n`;
-      }
       content += `Date: ${new Date().toLocaleString()}\n\n${'='.repeat(60)}\n\n`;
 
       conversation.forEach((msg) => {
@@ -250,7 +534,6 @@ const BookCompanion = () => {
           // Load the data
           setBookTitle(data.book.title || '');
           setBookAuthor(data.book.author || '');
-          setCurrentPage(data.book.currentPage || '');
           setConversation(data.conversation);
           setAuthorKnowledge(data.authorKnowledge || null);
 
@@ -283,13 +566,102 @@ const BookCompanion = () => {
       <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className="text-center mb-8">
-          <div className="flex items-center justify-center gap-3 mb-4">
-            <BookOpen className="w-10 h-10 text-purple-300" />
-            <Sparkles className="w-6 h-6 text-yellow-300" />
-            <h1 className="text-4xl font-bold text-white">Chat with the Author</h1>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <BookOpen className="w-10 h-10 text-purple-300" />
+              <Sparkles className="w-6 h-6 text-yellow-300" />
+              <h1 className="text-4xl font-bold text-white">Chat with the Author</h1>
+            </div>
+            <div className="flex items-center gap-3">
+              {user ? (
+                <>
+                  <span className="text-purple-200 text-sm">{user.email}</span>
+                  <button
+                    onClick={logout}
+                    className="text-purple-200 hover:text-white transition-colors text-sm px-4 py-2 bg-white/10 rounded-lg hover:bg-white/20 flex items-center gap-2"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    Logout
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => setShowAuthModal(true)}
+                  className="text-purple-200 hover:text-white transition-colors text-sm px-4 py-2 bg-white/10 rounded-lg hover:bg-white/20 flex items-center gap-2"
+                >
+                  <Mail className="w-4 h-4" />
+                  Sign In
+                </button>
+              )}
+            </div>
           </div>
           <p className="text-purple-200">Have a personal conversation with the author of any book</p>
         </div>
+
+        {/* Magic Link Auth Modal */}
+        {showAuthModal && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+            <div className="bg-slate-800 rounded-lg p-8 max-w-md w-full border border-white/20">
+              <h2 className="text-2xl font-bold text-white mb-4">Sign in to Book Companion</h2>
+
+              {authStatus === 'sent' ? (
+                <div className="text-center">
+                  <Mail className="w-16 h-16 text-purple-400 mx-auto mb-4" />
+                  <p className="text-white mb-2">Check your email!</p>
+                  <p className="text-purple-200 text-sm mb-4">
+                    We've sent a magic link to <strong>{authEmail}</strong>
+                  </p>
+                  <p className="text-purple-300 text-xs mb-6">
+                    Click the link in your email to sign in. The link expires in 15 minutes.
+                  </p>
+                  <button
+                    onClick={() => { setAuthStatus('idle'); setAuthEmail(''); }}
+                    className="text-purple-300 hover:text-white text-sm"
+                  >
+                    Try different email
+                  </button>
+                </div>
+              ) : (
+                <form onSubmit={sendMagicLink}>
+                  <p className="text-purple-200 mb-4">
+                    Enter your email to receive a magic link. No password needed!
+                  </p>
+                  <input
+                    type="email"
+                    value={authEmail}
+                    onChange={(e) => setAuthEmail(e.target.value)}
+                    placeholder="your@email.com"
+                    required
+                    className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-purple-300 mb-4"
+                  />
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      onClick={() => { setShowAuthModal(false); setAuthEmail(''); setAuthStatus('idle'); }}
+                      className="flex-1 px-4 py-3 bg-white/10 hover:bg-white/20 text-white rounded-lg transition"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={authStatus === 'sending'}
+                      className="flex-1 px-4 py-3 bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 disabled:from-gray-500 disabled:to-gray-600 text-white rounded-lg transition font-semibold flex items-center justify-center gap-2"
+                    >
+                      {authStatus === 'sending' ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Sending...
+                        </>
+                      ) : (
+                        'Send Magic Link'
+                      )}
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+          </div>
+        )}
 
         {!authorKnowledge ? (
           // Setup Screen
@@ -319,16 +691,6 @@ const BookCompanion = () => {
                 />
               </div>
 
-              <div>
-                <label className="block text-purple-200 text-sm mb-2">Current Page/Chapter (Optional)</label>
-                <input
-                  type="text"
-                  value={currentPage}
-                  onChange={(e) => setCurrentPage(e.target.value)}
-                  placeholder="e.g., Chapter 3"
-                  className="w-full px-4 py-3 bg-white/20 border border-white/30 rounded-lg text-white placeholder-purple-300"
-                />
-              </div>
             </div>
 
             <button
@@ -375,6 +737,23 @@ const BookCompanion = () => {
               className="hidden"
             />
 
+            {isLoadingAuthor && (
+              <div className="mt-8 space-y-3">
+                <h3 className="text-white font-medium flex items-center gap-2">
+                  <Search className="w-4 h-4 text-purple-300" />
+                  Researching...
+                </h3>
+                <div className="space-y-2">
+                  {researchStatus.map((status, idx) => (
+                    <div key={idx} className="flex items-center gap-2 text-purple-200 text-sm animate-pulse">
+                      <div className="w-1 h-1 bg-purple-400 rounded-full" />
+                      {status}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="mt-6 bg-purple-500/20 border border-purple-500/40 rounded-lg p-4">
               <p className="text-purple-200 text-sm">
                 <strong className="text-white">How it works:</strong> The AI will research the book and author, then embody the author's voice and personality. You'll have a natural conversation where they adapt to your needs - whether you want to explore ideas, understand concepts, apply frameworks, or question their thinking.
@@ -396,6 +775,28 @@ const BookCompanion = () => {
                 </div>
               </div>
               <div className="flex items-center gap-2">
+                {/* Save Conversation Button */}
+                {user && (
+                  <button
+                    onClick={saveConversation}
+                    className="text-purple-200 hover:text-white transition-colors text-sm px-4 py-2 bg-white/10 rounded-lg hover:bg-white/20 flex items-center gap-2"
+                  >
+                    <Save className="w-4 h-4" />
+                    Save
+                  </button>
+                )}
+
+                {/* Conversation History Button */}
+                {user && savedConversations.length > 0 && (
+                  <button
+                    onClick={() => setShowHistory(!showHistory)}
+                    className="text-purple-200 hover:text-white transition-colors text-sm px-4 py-2 bg-white/10 rounded-lg hover:bg-white/20 flex items-center gap-2"
+                  >
+                    <History className="w-4 h-4" />
+                    History
+                  </button>
+                )}
+
                 {/* Export Dropdown */}
                 <div className="relative group">
                   <button className="text-purple-200 hover:text-white transition-colors text-sm px-4 py-2 bg-white/10 rounded-lg hover:bg-white/20 flex items-center gap-2">
@@ -432,6 +833,41 @@ const BookCompanion = () => {
               </div>
             </div>
 
+            {/* Conversation History Sidebar */}
+            {showHistory && savedConversations.length > 0 && (
+              <div className="bg-white/10 backdrop-blur rounded-lg p-4 border border-white/20">
+                <h3 className="text-white font-semibold mb-4 flex items-center gap-2">
+                  <History className="w-5 h-5" />
+                  Your Conversations ({savedConversations.length})
+                </h3>
+                <div className="space-y-2 max-h-60 overflow-y-auto">
+                  {savedConversations.map((conv) => (
+                    <div
+                      key={conv.id}
+                      className="flex items-center justify-between bg-white/5 hover:bg-white/10 p-3 rounded-lg transition group"
+                    >
+                      <button
+                        onClick={() => loadConversation(conv.id)}
+                        className="flex-1 text-left"
+                      >
+                        <div className="text-white text-sm font-semibold">{conv.book_title}</div>
+                        <div className="text-purple-300 text-xs">{conv.book_author}</div>
+                        <div className="text-purple-400 text-xs mt-1">
+                          {conv.message_count} messages • {new Date(conv.updated_at).toLocaleDateString()}
+                        </div>
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); deleteConversation(conv.id); }}
+                        className="text-red-400 hover:text-red-300 opacity-0 group-hover:opacity-100 transition px-2"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Conversation */}
             <div className="bg-white/10 backdrop-blur rounded-lg p-6 border border-white/20 min-h-[500px] max-h-[500px] overflow-y-auto space-y-4">
               {conversation.map((msg, idx) => (
@@ -440,13 +876,14 @@ const BookCompanion = () => {
                   className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
                 >
                   <div
-                    className={`max-w-3xl px-4 py-3 rounded-lg ${
-                      msg.role === 'user'
-                        ? 'bg-purple-600 text-white'
-                        : 'bg-gradient-to-br from-blue-500/20 to-purple-500/20 border border-white/20 text-white'
-                    }`}
+                    className={`max-w-3xl px-4 py-3 rounded-lg ${msg.role === 'user'
+                      ? 'bg-purple-600 text-white'
+                      : 'bg-gradient-to-br from-blue-500/20 to-purple-500/20 border border-white/20 text-white prose prose-invert prose-sm'
+                      }`}
                   >
-                    <p className="whitespace-pre-wrap">{msg.content}</p>
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {msg.content}
+                    </ReactMarkdown>
                   </div>
                 </div>
               ))}
@@ -460,6 +897,22 @@ const BookCompanion = () => {
               )}
               <div ref={conversationEndRef} />
             </div>
+
+            {/* Question Starters */}
+            {!isLoading && questionStarters.length > 0 && conversation.length === 1 && (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                {questionStarters.map((question, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => sendMessage(question)}
+                    className="text-left px-4 py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-purple-200 text-sm transition-all flex items-start gap-3 group"
+                  >
+                    <MessageSquare className="w-4 h-4 text-purple-400 mt-0.5 flex-shrink-0 group-hover:text-purple-300" />
+                    <span>{question}</span>
+                  </button>
+                ))}
+              </div>
+            )}
 
             {/* Input */}
             <div className="bg-white/10 backdrop-blur rounded-lg p-4 border border-white/20">
@@ -486,7 +939,7 @@ const BookCompanion = () => {
           </div>
         )}
       </div>
-    </div>
+    </div >
   );
 };
 

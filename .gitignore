@@ -1,6 +1,8 @@
-# Environment variables
+# Environment variables (NEVER commit these!)
 .env
 .env.local
+.env.production
+.env.*.local
 
 # Dependencies
 node_modules/
@@ -20,17 +22,32 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+# Testing
+coverage/
+.nyc_output/
+
 # Editor directories and files
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
+.DS_Store
 
 # OS files
 .DS_Store
 Thumbs.db
+desktop.ini
 
 # Temporary files
 *.tmp
 temp/
+.cache/
+
+# Railway
+.railway/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3

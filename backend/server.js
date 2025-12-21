@@ -3,6 +3,10 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { GoogleGenerativeAI } from '@google/generative-ai';
+import db from './db.js';
+import authRoutes from './routes/auth.js';
+import conversationRoutes from './routes/conversations.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -12,6 +16,9 @@ dotenv.config({ path: path.join(__dirname, '..', '.env') });
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+
+// Initialize Google Generative AI
+const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
 
 app.use(cors());
 app.use(express.json());
@@ -27,6 +34,12 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', message: 'Book Companion API is running' });
 });
 
+// Authentication routes
+app.use('/api/auth', authRoutes);
+
+// Conversation routes
+app.use('/api/conversations', conversationRoutes);
+
 // Load author knowledge endpoint
 app.post('/api/load-author', async (req, res) => {
   const { bookTitle, bookAuthor } = req.body;
@@ -35,74 +48,61 @@ app.post('/api/load-author', async (req, res) => {
     return res.status(400).json({ error: 'Book title and author are required' });
   }
 
+  // Set headers for streaming
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+
+  const sendStatus = (status) => {
+    res.write(`data: ${JSON.stringify({ status })}\n\n`);
+  };
+
   try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': process.env.ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 3000,
-        tools: [
-          {
-            type: 'web_search_20250305',
-            name: 'web_search'
-          }
-        ],
-        messages: [
-          {
-            role: 'user',
-            content: `Search for comprehensive information about the book "${bookTitle}"${bookAuthor ? ` by ${bookAuthor}` : ''} and its author. I need you to gather:
+    sendStatus(`🔍 Initializing research for "${bookTitle}"...`);
 
-ABOUT THE BOOK:
-1. Key concepts, frameworks, and main arguments
-2. Chapter structure and major themes
-3. Notable quotes and principles
-4. Examples and case studies used
-5. The book's impact and reception
-
-ABOUT THE AUTHOR:
-1. Their background, expertise, and credentials
-2. Their writing style and tone
-3. Their philosophy and worldview
-4. Other works they've written
-5. Notable quotes or interviews from them
-6. Their personality and how they communicate
-
-Use web search extensively to find this information, then synthesize it into a comprehensive profile.`
-          }
-        ],
-      }),
+    const model = genAI.getGenerativeModel({
+      model: 'gemini-3-flash-preview',
+      tools: [{ google_search: {} }],
     });
 
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(`Anthropic API error: ${response.status} - ${JSON.stringify(errorData)}`);
-    }
+    sendStatus(`📖 Searching for key concepts and themes...`);
 
-    const data = await response.json();
-    console.log('Anthropic API Response:', JSON.stringify(data, null, 2));
+    const prompt = `Research and provide a comprehensive profile for the book "${bookTitle}" by ${bookAuthor}.
+    Include:
+    1. Main arguments and frameworks.
+    2. Author's background and communication style.
+    3. 3-4 significant quotes or principles.
+    4. Current impact and reception.
 
-    let fullKnowledge = '';
-    if (data.content) {
-      for (const block of data.content) {
-        if (block.type === 'text') {
-          fullKnowledge += block.text + '\n';
-        }
-      }
-    }
+    Also, generate 3 thought-provoking questions a reader might want to ask this author to start a conversation.
 
-    if (!fullKnowledge.trim()) {
-      fullKnowledge = `Book: ${bookTitle} by ${bookAuthor}. A meaningful work that we'll explore together.`;
-    }
+    Format your response as a JSON object with:
+    {
+      "knowledge": "detailed synthesis text",
+      "questionStarters": ["question 1", "question 2", "question 3"]
+    }`;
 
-    res.json({ knowledge: fullKnowledge });
+    // Note: Gemini 3 Flash with tools might take a bit
+    const result = await model.generateContent({
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      generationConfig: { responseMimeType: "application/json" }
+    });
+
+    sendStatus(`🎭 Synthesizing the author's voice...`);
+
+    const data = JSON.parse(result.response.text());
+
+    res.write(`data: ${JSON.stringify({
+      knowledge: data.knowledge,
+      questionStarters: data.questionStarters,
+      done: true
+    })}\n\n`);
+
+    res.end();
   } catch (error) {
     console.error('Error loading author knowledge:', error);
-    res.status(500).json({ error: error.message });
+    res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
+    res.end();
   }
 });
 
@@ -111,36 +111,17 @@ app.post('/api/greeting', async (req, res) => {
   const { bookTitle, bookAuthor, knowledge } = req.body;
 
   try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': process.env.ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 500,
-        messages: [
-          {
-            role: 'user',
-            content: `You are ${bookAuthor || 'the author'} of "${bookTitle}".
+    const model = genAI.getGenerativeModel({ model: 'gemini-3-flash-preview' });
 
-Author/Book knowledge:
-${knowledge}
+    const prompt = `You are ${bookAuthor || 'the author'} of "${bookTitle}".
 
-Write a warm, authentic greeting to a reader who wants to discuss your book with you. Make it feel personal and true to your voice. Keep it 2-3 sentences. Express genuine interest in helping them engage with your ideas.`
-          }
-        ],
-      }),
-    });
+    Author/Book knowledge:
+    ${knowledge}
 
-    if (!response.ok) {
-      throw new Error('Greeting request failed');
-    }
+    Write a warm, authentic greeting to a reader who wants to discuss your book with you. Make it feel personal and true to your voice. Keep it 2-3 sentences. Express genuine interest in helping them engage with your ideas.`;
 
-    const data = await response.json();
-    const greeting = data.content.find(block => block.type === 'text')?.text ||
+    const result = await model.generateContent(prompt);
+    const greeting = result.response.text() ||
       `Hello! I'm ${bookAuthor}, and I'm delighted to discuss "${bookTitle}" with you. What would you like to explore together?`;
 
     res.json({ greeting });
@@ -154,15 +135,17 @@ Write a warm, authentic greeting to a reader who wants to discuss your book with
 
 // Chat endpoint
 app.post('/api/chat', async (req, res) => {
-  const { bookTitle, bookAuthor, currentPage, authorKnowledge, conversation } = req.body;
+  const { bookTitle, bookAuthor, authorKnowledge, conversation } = req.body;
 
   if (!conversation || !Array.isArray(conversation)) {
     return res.status(400).json({ error: 'Conversation array is required' });
   }
 
   try {
+    const model = genAI.getGenerativeModel({ model: 'gemini-3-flash-preview' });
+
     // Build the author persona prompt
-    let systemPrompt = `You are ${bookAuthor || 'the author'} of "${bookTitle}". You are having a personal conversation with a reader about your book.
+    let systemInstruction = `You are ${bookAuthor || 'the author'} of "${bookTitle}". You are having a personal conversation with a reader about your book.
 
 CRITICAL INSTRUCTIONS - HOW TO EMBODY THE AUTHOR:
 
@@ -192,43 +175,44 @@ CRITICAL INSTRUCTIONS - HOW TO EMBODY THE AUTHOR:
 Author/Book Knowledge:
 ${authorKnowledge}
 
-${currentPage ? `Reader's current location: ${currentPage}` : ''}
-
 Remember: Be the author. Adapt fluidly to what they need. Make this feel like a genuine conversation with the person who wrote the book.`;
 
-    const apiMessages = [
-      { role: 'user', content: systemPrompt },
-      { role: 'assistant', content: 'I understand. I will embody the author authentically and adapt to what the reader needs throughout our conversation.' },
-      ...conversation
-    ];
+    // Map conversation to Gemini format
+    const history = conversation.slice(0, -1).map(msg => ({
+      role: msg.role === 'user' ? 'user' : 'model',
+      parts: [{ text: msg.content }],
+    }));
 
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': process.env.ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01'
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 1500,
-        messages: apiMessages,
-      }),
+    const lastMessage = conversation[conversation.length - 1].content;
+
+    const chat = model.startChat({
+      history: history,
+      systemInstruction: systemInstruction,
     });
 
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(`Anthropic API error: ${response.status} - ${JSON.stringify(errorData)}`);
+    // Set headers for streaming
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+
+    const result = await chat.sendMessageStream(lastMessage);
+
+    for await (const chunk of result.stream) {
+      const chunkText = chunk.text();
+      res.write(`data: ${JSON.stringify({ text: chunkText })}\n\n`);
     }
 
-    const data = await response.json();
-    const aiResponse = data.content.find(block => block.type === 'text')?.text ||
-      'I apologize, I had trouble responding. Could you try again?';
+    res.write('data: [DONE]\n\n');
+    res.end();
 
-    res.json({ response: aiResponse });
   } catch (error) {
     console.error('API Error:', error);
-    res.status(500).json({ error: error.message });
+    if (!res.headersSent) {
+      res.status(500).json({ error: error.message });
+    } else {
+      res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
+      res.end();
+    }
   }
 });
 
@@ -240,13 +224,13 @@ if (process.env.NODE_ENV === 'production') {
   });
 }
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`🚀 Book Companion API server running on http://localhost:${PORT}`);
   console.log(`✅ Health check: http://localhost:${PORT}/health`);
 
-  if (!process.env.ANTHROPIC_API_KEY) {
-    console.warn('⚠️  WARNING: ANTHROPIC_API_KEY not found in .env file!');
+  if (!process.env.GOOGLE_API_KEY) {
+    console.warn('⚠️  WARNING: GOOGLE_API_KEY not found in .env file!');
   } else {
-    console.log('✅ Anthropic API key loaded');
+    console.log('✅ Google API key loaded');
   }
 });
