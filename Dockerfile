@@ -6,7 +6,7 @@ WORKDIR /app/frontend
 
 # Copy frontend package files
 COPY frontend/package*.json ./
-RUN npm ci
+RUN npm install
 
 # Copy frontend source
 COPY frontend/ ./
@@ -21,7 +21,7 @@ WORKDIR /app
 # Install backend dependencies
 COPY backend/package*.json ./backend/
 WORKDIR /app/backend
-RUN npm ci --only=production
+RUN npm install --only=production
 
 # Copy backend source
 COPY backend/ ./
@@ -37,3 +37,4 @@ ENV NODE_ENV=production
 
 # Start the server
 CMD ["node", "server.js"]
+```
