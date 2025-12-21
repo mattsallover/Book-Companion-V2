@@ -3,7 +3,7 @@ import { BookOpen, Sparkles, Send, Loader2, User, Download, Upload, Search, Mess
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+const API_URL = import.meta.env.VITE_API_URL || (import.meta.env.PROD ? '' : 'http://localhost:3001');
 
 const BookCompanion = () => {
   // Authentication state
