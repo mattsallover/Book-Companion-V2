@@ -264,7 +264,23 @@ ${authorKnowledge}
 Remember: Be the author. Adapt fluidly to what they need. Make this feel like a genuine conversation with the person who wrote the book.`;
 
     // Map conversation to Gemini format
-    const history = conversation.slice(0, -1).map(msg => ({
+    // Filter to ensure history starts with a user message (Gemini requirement)
+    const conversationHistory = conversation.slice(0, -1);
+    
+    // Find the first user message index
+    let firstUserIndex = -1;
+    for (let i = 0; i < conversationHistory.length; i++) {
+      if (conversationHistory[i].role === 'user') {
+        firstUserIndex = i;
+        break;
+      }
+    }
+    
+    // If no user message found, start from the beginning (shouldn't happen, but be safe)
+    const startIndex = firstUserIndex >= 0 ? firstUserIndex : 0;
+    
+    // Map only from the first user message onwards
+    const history = conversationHistory.slice(startIndex).map(msg => ({
       role: msg.role === 'user' ? 'user' : 'model',
       parts: [{ text: msg.content }],
     }));
