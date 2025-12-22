@@ -18,6 +18,9 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 // Initialize Google Generative AI
+// #region agent log
+fetch('http://127.0.0.1:7243/ingest/7f98a630-9240-49f7-8c79-e0c391d12a20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:21',message:'Initializing GoogleGenerativeAI',data:{hasApiKey:!!process.env.GOOGLE_API_KEY,apiKeyLength:process.env.GOOGLE_API_KEY?.length||0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+// #endregion
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
 
 app.use(cors());
@@ -42,6 +45,9 @@ app.use('/api/conversations', conversationRoutes);
 
 // Load author knowledge endpoint
 app.post('/api/load-author', async (req, res) => {
+  // #region agent log
+  fetch('http://127.0.0.1:7243/ingest/7f98a630-9240-49f7-8c79-e0c391d12a20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:44',message:'/api/load-author endpoint called',data:{bookTitle:req.body?.bookTitle,bookAuthor:req.body?.bookAuthor,hasApiKey:!!process.env.GOOGLE_API_KEY},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+  // #endregion
   const { bookTitle, bookAuthor } = req.body;
 
   if (!bookTitle || !bookAuthor) {
@@ -49,6 +55,9 @@ app.post('/api/load-author', async (req, res) => {
   }
 
   // Set headers for streaming
+  // #region agent log
+  fetch('http://127.0.0.1:7243/ingest/7f98a630-9240-49f7-8c79-e0c391d12a20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:52',message:'Setting streaming headers',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+  // #endregion
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
@@ -60,10 +69,16 @@ app.post('/api/load-author', async (req, res) => {
   try {
     sendStatus(`🔍 Initializing research for "${bookTitle}"...`);
 
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/7f98a630-9240-49f7-8c79-e0c391d12a20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:63',message:'Before getGenerativeModel call',data:{hasGenAI:!!genAI,hasApiKey:!!process.env.GOOGLE_API_KEY},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
     const model = genAI.getGenerativeModel({
       model: 'gemini-3-flash-preview',
       tools: [{ google_search: {} }],
     });
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/7f98a630-9240-49f7-8c79-e0c391d12a20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:67',message:'After getGenerativeModel call',data:{hasModel:!!model},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
 
     sendStatus(`📖 Searching for key concepts and themes...`);
 
@@ -83,10 +98,16 @@ app.post('/api/load-author', async (req, res) => {
     }`;
 
     // Note: Gemini 3 Flash with tools might take a bit
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/7f98a630-9240-49f7-8c79-e0c391d12a20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:86',message:'Before generateContent call',data:{hasModel:!!model,promptLength:prompt.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
     const result = await model.generateContent({
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
       generationConfig: { responseMimeType: "application/json" }
     });
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/7f98a630-9240-49f7-8c79-e0c391d12a20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:90',message:'After generateContent call',data:{hasResult:!!result,hasResponse:!!result?.response},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
 
     sendStatus(`🎭 Synthesizing the author's voice...`);
 
@@ -100,6 +121,9 @@ app.post('/api/load-author', async (req, res) => {
 
     res.end();
   } catch (error) {
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/7f98a630-9240-49f7-8c79-e0c391d12a20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:102',message:'Error in /api/load-author',data:{errorMessage:error.message,errorName:error.name,errorStack:error.stack?.substring(0,200),headersSent:res.headersSent},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B,C,D'})}).catch(()=>{});
+    // #endregion
     console.error('Error loading author knowledge:', error);
     res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
     res.end();
@@ -135,6 +159,9 @@ app.post('/api/greeting', async (req, res) => {
 
 // Chat endpoint
 app.post('/api/chat', async (req, res) => {
+  // #region agent log
+  fetch('http://127.0.0.1:7243/ingest/7f98a630-9240-49f7-8c79-e0c391d12a20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:137',message:'/api/chat endpoint called',data:{hasConversation:!!req.body?.conversation,conversationLength:req.body?.conversation?.length,hasApiKey:!!process.env.GOOGLE_API_KEY},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+  // #endregion
   const { bookTitle, bookAuthor, authorKnowledge, conversation } = req.body;
 
   if (!conversation || !Array.isArray(conversation)) {
@@ -142,6 +169,9 @@ app.post('/api/chat', async (req, res) => {
   }
 
   try {
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/7f98a630-9240-49f7-8c79-e0c391d12a20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:145',message:'Before getGenerativeModel in chat',data:{hasGenAI:!!genAI},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    // #endregion
     const model = genAI.getGenerativeModel({ model: 'gemini-3-flash-preview' });
 
     // Build the author persona prompt
@@ -191,11 +221,20 @@ Remember: Be the author. Adapt fluidly to what they need. Make this feel like a 
     });
 
     // Set headers for streaming
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/7f98a630-9240-49f7-8c79-e0c391d12a20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:194',message:'Setting streaming headers in chat',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+    // #endregion
     res.setHeader('Content-Type', 'text/event-stream');
     res.setHeader('Cache-Control', 'no-cache');
     res.setHeader('Connection', 'keep-alive');
 
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/7f98a630-9240-49f7-8c79-e0c391d12a20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:198',message:'Before sendMessageStream call',data:{hasChat:!!chat,lastMessageLength:lastMessage?.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
     const result = await chat.sendMessageStream(lastMessage);
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/7f98a630-9240-49f7-8c79-e0c391d12a20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:199',message:'After sendMessageStream call',data:{hasResult:!!result,hasStream:!!result?.stream},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
 
     for await (const chunk of result.stream) {
       const chunkText = chunk.text();
@@ -206,6 +245,9 @@ Remember: Be the author. Adapt fluidly to what they need. Make this feel like a 
     res.end();
 
   } catch (error) {
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/7f98a630-9240-49f7-8c79-e0c391d12a20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:208',message:'Error in /api/chat',data:{errorMessage:error.message,errorName:error.name,errorStack:error.stack?.substring(0,200),headersSent:res.headersSent},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B,C,D'})}).catch(()=>{});
+    // #endregion
     console.error('API Error:', error);
     if (!res.headersSent) {
       res.status(500).json({ error: error.message });
