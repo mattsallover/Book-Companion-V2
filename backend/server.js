@@ -315,12 +315,40 @@ Remember: Be the author. Adapt fluidly to what they need. Make this feel like a 
 
     let chat;
     try {
-      chat = model.startChat({
-        history: history,
-        systemInstruction: systemInstruction,
+      // Escape quotes in systemInstruction to prevent parsing errors
+      const sanitizedSystemInstruction = systemInstruction
+        .replace(/"/g, "'")  // Replace double quotes with single quotes
+        .replace(/\n{3,}/g, '\n\n');  // Limit consecutive newlines
+      
+      // Limit system instruction length (Gemini has limits)
+      const maxLength = 30000;
+      const truncatedInstruction = sanitizedSystemInstruction.length > maxLength
+        ? sanitizedSystemInstruction.substring(0, maxLength) + '\n\n[Instruction truncated due to length]'
+        : sanitizedSystemInstruction;
+      
+      console.log('Starting chat:', {
+        historyLength: history.length,
+        systemInstructionLength: truncatedInstruction.length,
+        firstHistoryRole: history[0]?.role
       });
+      
+      // Build chat config
+      const chatConfig = {
+        history: history,
+      };
+      
+      // Only add systemInstruction if it's valid
+      if (truncatedInstruction && truncatedInstruction.trim().length > 0) {
+        chatConfig.systemInstruction = truncatedInstruction;
+      }
+      
+      chat = model.startChat(chatConfig);
     } catch (chatError) {
-      console.error('Failed to start chat:', chatError);
+      console.error('Failed to start chat:', {
+        error: chatError.message,
+        name: chatError.name,
+        stack: chatError.stack?.substring(0, 500)
+      });
       res.write(`data: ${JSON.stringify({ error: 'Failed to start chat: ' + chatError.message })}\n\n`);
       res.write('data: [DONE]\n\n');
       res.end();
