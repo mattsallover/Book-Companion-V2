@@ -276,14 +276,25 @@ Remember: Be the author. Adapt fluidly to what they need. Make this feel like a 
       }
     }
     
-    // If no user message found, start from the beginning (shouldn't happen, but be safe)
-    const startIndex = firstUserIndex >= 0 ? firstUserIndex : 0;
+    // Build history starting from first user message
+    let history = [];
+    if (firstUserIndex >= 0) {
+      // Only include messages from the first user message onwards
+      history = conversationHistory.slice(firstUserIndex).map(msg => ({
+        role: msg.role === 'user' ? 'user' : 'model',
+        parts: [{ text: msg.content }],
+      }));
+    }
     
-    // Map only from the first user message onwards
-    const history = conversationHistory.slice(startIndex).map(msg => ({
-      role: msg.role === 'user' ? 'user' : 'model',
-      parts: [{ text: msg.content }],
-    }));
+    // Log for debugging
+    console.log('Conversation history mapping:', {
+      totalMessages: conversation.length,
+      historyLength: conversationHistory.length,
+      firstUserIndex,
+      historyLength: history.length,
+      firstHistoryRole: history[0]?.role,
+      lastHistoryRole: history[history.length - 1]?.role
+    });
 
     const lastMessage = conversation[conversation.length - 1]?.content;
     
