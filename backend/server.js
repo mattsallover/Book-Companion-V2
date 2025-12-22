@@ -311,6 +311,31 @@ Remember: Be the author. Adapt fluidly to what they need. Make this feel like a 
     fetch('http://127.0.0.1:7243/ingest/7f98a630-9240-49f7-8c79-e0c391d12a20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:230',message:'After sendMessageStream call',data:{hasResult:!!result,hasStream:!!result?.stream},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
     // #endregion
 
+    // Set up timeout to prevent hanging streams (60 seconds)
+    const streamTimeout = setTimeout(() => {
+      console.error('Stream timeout after 60 seconds');
+      if (!res.destroyed && !res.closed) {
+        res.write(`data: ${JSON.stringify({ error: 'Stream timeout - response took too long' })}\n\n`);
+        res.write('data: [DONE]\n\n');
+        res.end();
+      }
+    }, 60000);
+
+    // Set up keepalive to prevent connection timeout (every 30 seconds)
+    const keepAliveInterval = setInterval(() => {
+      if (!res.destroyed && !res.closed) {
+        try {
+          res.write(': keepalive\n\n');
+        } catch (e) {
+          clearInterval(keepAliveInterval);
+          clearTimeout(streamTimeout);
+        }
+      } else {
+        clearInterval(keepAliveInterval);
+        clearTimeout(streamTimeout);
+      }
+    }, 30000);
+
     try {
       for await (const chunk of result.stream) {
         const chunkText = chunk.text();
@@ -318,13 +343,19 @@ Remember: Be the author. Adapt fluidly to what they need. Make this feel like a 
           res.write(`data: ${JSON.stringify({ text: chunkText })}\n\n`);
         }
       }
+      clearTimeout(streamTimeout);
+      clearInterval(keepAliveInterval);
       res.write('data: [DONE]\n\n');
       res.end();
     } catch (streamError) {
       console.error('Stream error:', streamError);
-      res.write(`data: ${JSON.stringify({ error: 'Stream interrupted: ' + streamError.message })}\n\n`);
-      res.write('data: [DONE]\n\n');
-      res.end();
+      clearTimeout(streamTimeout);
+      clearInterval(keepAliveInterval);
+      if (!res.destroyed && !res.closed) {
+        res.write(`data: ${JSON.stringify({ error: 'Stream interrupted: ' + streamError.message })}\n\n`);
+        res.write('data: [DONE]\n\n');
+        res.end();
+      }
     }
 
   } catch (error) {

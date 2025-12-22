@@ -393,34 +393,80 @@ const BookCompanion = () => {
       // Add a placeholder message for the AI
       setConversation([...initialConversation, { role: 'assistant', content: '' }]);
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+      // Set up timeout to detect stalled streams (90 seconds)
+      const streamTimeout = setTimeout(() => {
+        reader.cancel();
+        setConversation(prev => {
+          const updated = [...prev];
+          updated[updated.length - 1] = { 
+            role: 'assistant', 
+            content: aiResponseText || 'I apologize, the response took too long. Please try again.' 
+          };
+          return updated;
+        });
+        setIsLoading(false);
+      }, 90000);
 
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split('\n');
+      let lastChunkTime = Date.now();
 
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const dataStr = line.slice(6);
-            if (dataStr === '[DONE]') break;
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) {
+            clearTimeout(streamTimeout);
+            break;
+          }
 
-            try {
-              const data = JSON.parse(dataStr);
-              if (data.text) {
-                aiResponseText += data.text;
-                // Update the last message in the conversation
-                setConversation(prev => {
-                  const updated = [...prev];
-                  updated[updated.length - 1] = { role: 'assistant', content: aiResponseText };
-                  return updated;
-                });
+          lastChunkTime = Date.now();
+          const chunk = decoder.decode(value, { stream: true });
+          const lines = chunk.split('\n');
+
+          for (const line of lines) {
+            // Skip keepalive messages
+            if (line.trim() === ':' || line.trim().startsWith(': ')) continue;
+            
+            if (line.startsWith('data: ')) {
+              const dataStr = line.slice(6);
+              if (dataStr === '[DONE]') {
+                clearTimeout(streamTimeout);
+                break;
               }
-            } catch (e) {
-              console.error('Error parsing stream chunk:', e);
+
+              try {
+                const data = JSON.parse(dataStr);
+                if (data.text) {
+                  aiResponseText += data.text;
+                  // Update the last message in the conversation
+                  setConversation(prev => {
+                    const updated = [...prev];
+                    updated[updated.length - 1] = { role: 'assistant', content: aiResponseText };
+                    return updated;
+                  });
+                }
+                if (data.error) {
+                  clearTimeout(streamTimeout);
+                  throw new Error(data.error);
+                }
+              } catch (e) {
+                if (e instanceof Error && e.message.includes('error')) {
+                  clearTimeout(streamTimeout);
+                  throw e;
+                }
+                console.error('Error parsing stream chunk:', e);
+              }
             }
           }
+
+          // Check if stream has stalled (no data for 30 seconds)
+          if (Date.now() - lastChunkTime > 30000) {
+            console.warn('Stream appears to have stalled');
+            clearTimeout(streamTimeout);
+            break;
+          }
         }
+      } catch (readError) {
+        clearTimeout(streamTimeout);
+        throw readError;
       }
     } catch (error) {
       console.error('API Error:', error);
