@@ -331,6 +331,23 @@ Remember: Be the author. Adapt fluidly to what they need. Make this feel like a 
   }
 });
 
+// Error handling middleware - must be after all routes
+app.use((err, req, res, next) => {
+  console.error('Unhandled error:', err);
+  if (res.headersSent) {
+    // If headers already sent (streaming), try to send error via SSE
+    try {
+      res.write(`data: ${JSON.stringify({ error: err.message || 'An unexpected error occurred' })}\n\n`);
+      res.write('data: [DONE]\n\n');
+      res.end();
+    } catch (writeError) {
+      console.error('Failed to write error after headers sent:', writeError);
+    }
+  } else {
+    res.status(500).json({ error: err.message || 'An unexpected error occurred' });
+  }
+});
+
 // Serve index.html for all non-API routes in production (SPA support)
 if (process.env.NODE_ENV === 'production') {
   const frontendDistPath = path.join(__dirname, '..', 'frontend', 'dist');
