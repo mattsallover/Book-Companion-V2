@@ -280,10 +280,17 @@ Remember: Be the author. Adapt fluidly to what they need. Make this feel like a 
     let history = [];
     if (firstUserIndex >= 0) {
       // Only include messages from the first user message onwards
-      history = conversationHistory.slice(firstUserIndex).map(msg => ({
+      const filteredHistory = conversationHistory.slice(firstUserIndex);
+      history = filteredHistory.map(msg => ({
         role: msg.role === 'user' ? 'user' : 'model',
         parts: [{ text: msg.content }],
       }));
+      
+      // Double-check: ensure first message is from user (Gemini requirement)
+      if (history.length > 0 && history[0].role !== 'user') {
+        console.warn('History does not start with user message, clearing history');
+        history = [];
+      }
     }
     
     // Log for debugging
@@ -291,9 +298,10 @@ Remember: Be the author. Adapt fluidly to what they need. Make this feel like a 
       totalMessages: conversation.length,
       historyLength: conversationHistory.length,
       firstUserIndex,
-      historyLength: history.length,
+      mappedHistoryLength: history.length,
       firstHistoryRole: history[0]?.role,
-      lastHistoryRole: history[history.length - 1]?.role
+      lastHistoryRole: history[history.length - 1]?.role,
+      conversationRoles: conversationHistory.map(m => m.role)
     });
 
     const lastMessage = conversation[conversation.length - 1]?.content;
