@@ -160,10 +160,11 @@ app.post('/api/greeting', async (req, res) => {
 // Chat endpoint
 app.post('/api/chat', async (req, res) => {
   // #region agent log
-  fetch('http://127.0.0.1:7243/ingest/7f98a630-9240-49f7-8c79-e0c391d12a20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:137',message:'/api/chat endpoint called',data:{hasConversation:!!req.body?.conversation,conversationLength:req.body?.conversation?.length,hasApiKey:!!process.env.GOOGLE_API_KEY},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+  fetch('http://127.0.0.1:7243/ingest/7f98a630-9240-49f7-8c79-e0c391d12a20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:161',message:'/api/chat endpoint called',data:{hasConversation:!!req.body?.conversation,conversationLength:req.body?.conversation?.length,hasApiKey:!!process.env.GOOGLE_API_KEY},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
   // #endregion
   const { bookTitle, bookAuthor, authorKnowledge, conversation } = req.body;
 
+  // Validate inputs BEFORE setting headers
   if (!conversation || !Array.isArray(conversation)) {
     return res.status(400).json({ error: 'Conversation array is required' });
   }
@@ -171,6 +172,10 @@ app.post('/api/chat', async (req, res) => {
   // Validate Google API key before starting
   if (!process.env.GOOGLE_API_KEY) {
     return res.status(500).json({ error: 'Google API key is not configured' });
+  }
+
+  if (!genAI) {
+    return res.status(500).json({ error: 'Google AI client not initialized' });
   }
 
   // Set headers for streaming IMMEDIATELY before any async operations
@@ -181,9 +186,19 @@ app.post('/api/chat', async (req, res) => {
 
   try {
     // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/7f98a630-9240-49f7-8c79-e0c391d12a20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:175',message:'Before getGenerativeModel in chat',data:{hasGenAI:!!genAI,hasApiKey:!!process.env.GOOGLE_API_KEY},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    fetch('http://127.0.0.1:7243/ingest/7f98a630-9240-49f7-8c79-e0c391d12a20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:185',message:'Before getGenerativeModel in chat',data:{hasGenAI:!!genAI,hasApiKey:!!process.env.GOOGLE_API_KEY},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
     // #endregion
-    const model = genAI.getGenerativeModel({ model: 'gemini-3-flash-preview' });
+    
+    let model;
+    try {
+      model = genAI.getGenerativeModel({ model: 'gemini-3-flash-preview' });
+    } catch (modelError) {
+      console.error('Failed to get generative model:', modelError);
+      res.write(`data: ${JSON.stringify({ error: 'Failed to initialize AI model: ' + modelError.message })}\n\n`);
+      res.write('data: [DONE]\n\n');
+      res.end();
+      return;
+    }
 
     // Build the author persona prompt
     let systemInstruction = `You are ${bookAuthor || 'the author'} of "${bookTitle}". You are having a personal conversation with a reader about your book.
@@ -233,17 +248,37 @@ Remember: Be the author. Adapt fluidly to what they need. Make this feel like a 
       return;
     }
 
-    const chat = model.startChat({
-      history: history,
-      systemInstruction: systemInstruction,
-    });
+    let chat;
+    try {
+      chat = model.startChat({
+        history: history,
+        systemInstruction: systemInstruction,
+      });
+    } catch (chatError) {
+      console.error('Failed to start chat:', chatError);
+      res.write(`data: ${JSON.stringify({ error: 'Failed to start chat: ' + chatError.message })}\n\n`);
+      res.write('data: [DONE]\n\n');
+      res.end();
+      return;
+    }
 
     // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/7f98a630-9240-49f7-8c79-e0c391d12a20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:198',message:'Before sendMessageStream call',data:{hasChat:!!chat,lastMessageLength:lastMessage?.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+    fetch('http://127.0.0.1:7243/ingest/7f98a630-9240-49f7-8c79-e0c391d12a20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:218',message:'Before sendMessageStream call',data:{hasChat:!!chat,lastMessageLength:lastMessage?.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
     // #endregion
-    const result = await chat.sendMessageStream(lastMessage);
+    
+    let result;
+    try {
+      result = await chat.sendMessageStream(lastMessage);
+    } catch (streamError) {
+      console.error('Failed to send message stream:', streamError);
+      res.write(`data: ${JSON.stringify({ error: 'Failed to start stream: ' + streamError.message })}\n\n`);
+      res.write('data: [DONE]\n\n');
+      res.end();
+      return;
+    }
+    
     // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/7f98a630-9240-49f7-8c79-e0c391d12a20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:199',message:'After sendMessageStream call',data:{hasResult:!!result,hasStream:!!result?.stream},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+    fetch('http://127.0.0.1:7243/ingest/7f98a630-9240-49f7-8c79-e0c391d12a20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:230',message:'After sendMessageStream call',data:{hasResult:!!result,hasStream:!!result?.stream},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
     // #endregion
 
     try {
