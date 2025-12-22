@@ -305,14 +305,22 @@ Remember: Be the author. Adapt fluidly to what they need. Make this feel like a 
 
   } catch (error) {
     // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/7f98a630-9240-49f7-8c79-e0c391d12a20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:247',message:'Error in /api/chat',data:{errorMessage:error.message,errorName:error.name,errorStack:error.stack?.substring(0,200),headersSent:res.headersSent},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B,C,D'})}).catch(()=>{});
+    fetch('http://127.0.0.1:7243/ingest/7f98a630-9240-49f7-8c79-e0c391d12a20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:260',message:'Error in /api/chat',data:{errorMessage:error.message,errorName:error.name,errorStack:error.stack?.substring(0,200),headersSent:res.headersSent},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B,C,D'})}).catch(()=>{});
     // #endregion
-    console.error('API Error:', error);
+    console.error('API Error in /api/chat:', {
+      message: error.message,
+      name: error.name,
+      stack: error.stack,
+      headersSent: res.headersSent,
+      destroyed: res.destroyed
+    });
     // Headers are already set, so send error via SSE
     try {
-      res.write(`data: ${JSON.stringify({ error: error.message || 'An error occurred' })}\n\n`);
-      res.write('data: [DONE]\n\n');
-      res.end();
+      if (!res.destroyed && !res.closed) {
+        res.write(`data: ${JSON.stringify({ error: error.message || 'An error occurred' })}\n\n`);
+        res.write('data: [DONE]\n\n');
+        res.end();
+      }
     } catch (writeError) {
       // If write fails, connection might be closed
       console.error('Failed to write error to stream:', writeError);
