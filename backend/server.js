@@ -4,9 +4,11 @@ import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import jwt from 'jsonwebtoken';
 import db from './db.js';
 import authRoutes from './routes/auth.js';
 import conversationRoutes from './routes/conversations.js';
+import { requireAuth } from './middleware/requireAuth.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -133,12 +135,25 @@ app.post('/api/greeting', async (req, res) => {
   }
 });
 
-// Chat endpoint
+// Chat endpoint - supports both authenticated and unauthenticated users
 app.post('/api/chat', async (req, res) => {
-  const { bookTitle, bookAuthor, authorKnowledge, conversation } = req.body;
+  const { bookTitle, bookAuthor, authorKnowledge, conversation, conversationId } = req.body;
 
   if (!conversation || !Array.isArray(conversation)) {
     return res.status(400).json({ error: 'Conversation array is required' });
+  }
+
+  // Try to get user from auth token (optional - allows unauthenticated use)
+  let userId = null;
+  try {
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.substring(7);
+      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key-change-in-production');
+      userId = decoded.userId;
+    }
+  } catch (authError) {
+    // User not authenticated - that's okay, just won't auto-save
   }
 
   try {
@@ -172,10 +187,21 @@ CRITICAL INSTRUCTIONS - HOW TO EMBODY THE AUTHOR:
 
 5. STAY IN CHARACTER: Never break the illusion. You ARE the author. Don't say "as the author would say" - just say it. Don't apologize for not being real.
 
+6. FORMATTING: Format your responses using Markdown for better readability:
+   - Use **bold** for emphasis
+   - Use *italic* for subtle emphasis
+   - Use bullet points (- or *) for lists
+   - Use numbered lists (1., 2., 3.) for sequences
+   - Use > for quotes or important points
+   - Use \`code\` for technical terms or concepts
+   - Use \`\`\`code blocks\`\`\` for longer code examples
+   - Use ## for section headings when appropriate
+   - Keep paragraphs concise and well-structured
+
 Author/Book Knowledge:
 ${authorKnowledge}
 
-Remember: Be the author. Adapt fluidly to what they need. Make this feel like a genuine conversation with the person who wrote the book.`;
+Remember: Be the author. Adapt fluidly to what they need. Make this feel like a genuine conversation with the person who wrote the book. Format your responses in Markdown for clarity and readability.`;
 
     // Map conversation to Gemini format
     const history = conversation.slice(0, -1).map(msg => ({
@@ -197,13 +223,78 @@ Remember: Be the author. Adapt fluidly to what they need. Make this feel like a 
 
     const result = await chat.sendMessageStream(lastMessage);
 
+    let fullResponse = '';
+    let newConversationId = conversationId;
+
+    // Auto-save to database if user is authenticated (before streaming response)
+    if (userId) {
+      try {
+        const lastUserMessage = conversation[conversation.length - 1];
+
+        // Create conversation if it doesn't exist
+        if (!newConversationId) {
+          const convResult = await db.query(
+            `INSERT INTO conversations (user_id, book_title, book_author, author_knowledge)
+             VALUES ($1, $2, $3, $4)
+             RETURNING id`,
+            [userId, bookTitle, bookAuthor, authorKnowledge]
+          );
+          newConversationId = convResult.rows[0].id;
+        }
+
+        // Save user message (check if it already exists to avoid duplicates)
+        const userMsgCheck = await db.query(
+          `SELECT id FROM messages 
+           WHERE conversation_id = $1 AND role = $2 AND content = $3 
+           ORDER BY created_at DESC LIMIT 1`,
+          [newConversationId, 'user', lastUserMessage.content]
+        );
+        
+        if (userMsgCheck.rows.length === 0) {
+          await db.query(
+            'INSERT INTO messages (conversation_id, role, content) VALUES ($1, $2, $3)',
+            [newConversationId, 'user', lastUserMessage.content]
+          );
+        }
+      } catch (saveError) {
+        console.error('Error saving user message:', saveError);
+        // Continue even if save fails
+      }
+    }
+
+    // Stream the response
     for await (const chunk of result.stream) {
       const chunkText = chunk.text();
+      fullResponse += chunkText;
       res.write(`data: ${JSON.stringify({ text: chunkText })}\n\n`);
+    }
+
+    // Send conversationId if it was created
+    if (newConversationId && newConversationId !== conversationId) {
+      res.write(`data: ${JSON.stringify({ conversationId: newConversationId })}\n\n`);
     }
 
     res.write('data: [DONE]\n\n');
     res.end();
+
+    // Save assistant response after streaming completes
+    if (userId && fullResponse && newConversationId) {
+      try {
+        await db.query(
+          'INSERT INTO messages (conversation_id, role, content) VALUES ($1, $2, $3)',
+          [newConversationId, 'assistant', fullResponse]
+        );
+
+        // Update conversation timestamp
+        await db.query(
+          'UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = $1',
+          [newConversationId]
+        );
+      } catch (saveError) {
+        console.error('Error saving assistant response:', saveError);
+        // Don't fail the request if save fails
+      }
+    }
 
   } catch (error) {
     console.error('API Error:', error);

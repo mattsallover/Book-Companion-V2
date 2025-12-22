@@ -59,6 +59,10 @@ const BookCompanion = () => {
   useEffect(() => {
     if (user && authToken) {
       fetchConversations();
+    } else {
+      // Clear conversations if user logs out
+      setSavedConversations([]);
+      setConversationId(null);
     }
   }, [user, authToken]);
 
@@ -196,6 +200,9 @@ const BookCompanion = () => {
     }
   };
 
+  // Note: Conversations are now auto-saved to the database as messages are sent
+  // The manual save button is kept for explicit saves, but auto-save happens in the background
+
   const loadConversation = async (id) => {
     try {
       const response = await fetch(`${API_URL}/api/conversations/${id}`, {
@@ -258,6 +265,10 @@ const BookCompanion = () => {
       return;
     }
 
+    // Reset conversation ID when starting a new book
+    setConversationId(null);
+    setConversation([]);
+    
     setIsLoadingAuthor(true);
     setResearchStatus(['Starting research...']);
     setQuestionStarters([]);
@@ -375,12 +386,14 @@ const BookCompanion = () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...getAuthHeaders(),
         },
         body: JSON.stringify({
           bookTitle,
           bookAuthor,
           authorKnowledge,
           conversation: initialConversation,
+          conversationId, // Send existing conversationId if we have one
         }),
       });
 
@@ -416,6 +429,10 @@ const BookCompanion = () => {
                   return updated;
                 });
               }
+              // Handle conversationId from backend (for auto-save)
+              if (data.conversationId) {
+                setConversationId(data.conversationId);
+              }
             } catch (e) {
               console.error('Error parsing stream chunk:', e);
             }
@@ -445,6 +462,7 @@ const BookCompanion = () => {
     setAuthorKnowledge(null);
     setBookTitle('');
     setBookAuthor('');
+    setConversationId(null); // Clear conversation ID when resetting
   };
 
   const exportConversation = (format) => {
@@ -775,11 +793,12 @@ const BookCompanion = () => {
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                {/* Save Conversation Button */}
+                {/* Save Conversation Button - Note: Conversations auto-save, but this allows manual save */}
                 {user && (
                   <button
                     onClick={saveConversation}
                     className="text-purple-200 hover:text-white transition-colors text-sm px-4 py-2 bg-white/10 rounded-lg hover:bg-white/20 flex items-center gap-2"
+                    title="Conversations auto-save as you chat. Click to manually save."
                   >
                     <Save className="w-4 h-4" />
                     Save
