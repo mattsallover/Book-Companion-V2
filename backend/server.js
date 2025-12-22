@@ -317,35 +317,33 @@ Remember: Be the author. Adapt fluidly to what they need. Make this feel like a 
       return;
     }
 
+    // Instead of using systemInstruction in startChat (which seems to have issues),
+    // we'll prepend it to the first user message in history if history is empty,
+    // or include it as context in the lastMessage
+    let messageToSend = lastMessage;
+    if (history.length === 0) {
+      // No history, so include system instruction in the first message
+      messageToSend = `${systemInstruction}\n\nNow, please respond to this message: ${lastMessage}`;
+    } else {
+      // Has history, so we can use the system instruction as context in the message
+      messageToSend = `[Context: ${systemInstruction.substring(0, 1000)}...]\n\n${lastMessage}`;
+    }
+
     let chat;
     try {
-      // Instead of using systemInstruction in startChat (which seems to have issues),
-      // we'll prepend it to the first user message in history if history is empty,
-      // or include it as context in the lastMessage
-      
       console.log('Starting chat:', {
         historyLength: history.length,
         systemInstructionLength: systemInstruction.length,
         firstHistoryRole: history[0]?.role,
         bookTitle: bookTitle?.substring(0, 50),
-        bookAuthor: bookAuthor?.substring(0, 50)
+        bookAuthor: bookAuthor?.substring(0, 50),
+        messageToSendLength: messageToSend.length
       });
       
       // Build chat config - don't use systemInstruction parameter
       const chatConfig = {
         history: history,
       };
-      
-      // If no history, prepend system instruction to the message
-      // Otherwise, include it in the lastMessage
-      let messageToSend = lastMessage;
-      if (history.length === 0) {
-        // No history, so include system instruction in the first message
-        messageToSend = `${systemInstruction}\n\nNow, please respond to this message: ${lastMessage}`;
-      } else {
-        // Has history, so we can use the system instruction as context in the message
-        messageToSend = `[Context: ${systemInstruction.substring(0, 1000)}...]\n\n${lastMessage}`;
-      }
       
       chat = model.startChat(chatConfig);
     } catch (chatError) {
