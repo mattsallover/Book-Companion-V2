@@ -21,7 +21,13 @@ const PORT = process.env.PORT || 3001;
 // #region agent log
 fetch('http://127.0.0.1:7243/ingest/7f98a630-9240-49f7-8c79-e0c391d12a20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:21',message:'Initializing GoogleGenerativeAI',data:{hasApiKey:!!process.env.GOOGLE_API_KEY,apiKeyLength:process.env.GOOGLE_API_KEY?.length||0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
 // #endregion
-const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
+let genAI;
+try {
+  genAI = process.env.GOOGLE_API_KEY ? new GoogleGenerativeAI(process.env.GOOGLE_API_KEY) : null;
+} catch (initError) {
+  console.error('Failed to initialize GoogleGenerativeAI:', initError);
+  genAI = null;
+}
 
 app.use(cors());
 app.use(express.json());
