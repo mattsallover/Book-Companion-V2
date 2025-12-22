@@ -18,16 +18,7 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 // Initialize Google Generative AI
-// #region agent log
-fetch('http://127.0.0.1:7243/ingest/7f98a630-9240-49f7-8c79-e0c391d12a20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:21',message:'Initializing GoogleGenerativeAI',data:{hasApiKey:!!process.env.GOOGLE_API_KEY,apiKeyLength:process.env.GOOGLE_API_KEY?.length||0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-// #endregion
-let genAI;
-try {
-  genAI = process.env.GOOGLE_API_KEY ? new GoogleGenerativeAI(process.env.GOOGLE_API_KEY) : null;
-} catch (initError) {
-  console.error('Failed to initialize GoogleGenerativeAI:', initError);
-  genAI = null;
-}
+const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
 
 app.use(cors());
 app.use(express.json());
@@ -43,30 +34,6 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', message: 'Book Companion API is running' });
 });
 
-// Test Google API endpoint (for debugging)
-app.get('/api/test-google', async (req, res) => {
-  try {
-    if (!genAI) {
-      return res.status(500).json({ error: 'Google AI client not initialized', hasApiKey: !!process.env.GOOGLE_API_KEY });
-    }
-    const model = genAI.getGenerativeModel({ model: 'gemini-3-flash-preview' });
-    const result = await model.generateContent('Say "Hello, API is working!"');
-    res.json({ 
-      status: 'success', 
-      response: result.response.text(),
-      hasApiKey: !!process.env.GOOGLE_API_KEY 
-    });
-  } catch (error) {
-    console.error('Test Google API error:', error);
-    res.status(500).json({ 
-      error: error.message, 
-      name: error.name,
-      hasApiKey: !!process.env.GOOGLE_API_KEY,
-      hasGenAI: !!genAI
-    });
-  }
-});
-
 // Authentication routes
 app.use('/api/auth', authRoutes);
 
@@ -75,9 +42,6 @@ app.use('/api/conversations', conversationRoutes);
 
 // Load author knowledge endpoint
 app.post('/api/load-author', async (req, res) => {
-  // #region agent log
-  fetch('http://127.0.0.1:7243/ingest/7f98a630-9240-49f7-8c79-e0c391d12a20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:44',message:'/api/load-author endpoint called',data:{bookTitle:req.body?.bookTitle,bookAuthor:req.body?.bookAuthor,hasApiKey:!!process.env.GOOGLE_API_KEY},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-  // #endregion
   const { bookTitle, bookAuthor } = req.body;
 
   if (!bookTitle || !bookAuthor) {
@@ -85,9 +49,6 @@ app.post('/api/load-author', async (req, res) => {
   }
 
   // Set headers for streaming
-  // #region agent log
-  fetch('http://127.0.0.1:7243/ingest/7f98a630-9240-49f7-8c79-e0c391d12a20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:52',message:'Setting streaming headers',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-  // #endregion
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
@@ -99,16 +60,10 @@ app.post('/api/load-author', async (req, res) => {
   try {
     sendStatus(`🔍 Initializing research for "${bookTitle}"...`);
 
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/7f98a630-9240-49f7-8c79-e0c391d12a20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:63',message:'Before getGenerativeModel call',data:{hasGenAI:!!genAI,hasApiKey:!!process.env.GOOGLE_API_KEY},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
     const model = genAI.getGenerativeModel({
       model: 'gemini-3-flash-preview',
       tools: [{ google_search: {} }],
     });
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/7f98a630-9240-49f7-8c79-e0c391d12a20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:67',message:'After getGenerativeModel call',data:{hasModel:!!model},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
 
     sendStatus(`📖 Searching for key concepts and themes...`);
 
@@ -128,16 +83,10 @@ app.post('/api/load-author', async (req, res) => {
     }`;
 
     // Note: Gemini 3 Flash with tools might take a bit
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/7f98a630-9240-49f7-8c79-e0c391d12a20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:86',message:'Before generateContent call',data:{hasModel:!!model,promptLength:prompt.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-    // #endregion
     const result = await model.generateContent({
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
       generationConfig: { responseMimeType: "application/json" }
     });
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/7f98a630-9240-49f7-8c79-e0c391d12a20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:90',message:'After generateContent call',data:{hasResult:!!result,hasResponse:!!result?.response},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-    // #endregion
 
     sendStatus(`🎭 Synthesizing the author's voice...`);
 
@@ -151,9 +100,6 @@ app.post('/api/load-author', async (req, res) => {
 
     res.end();
   } catch (error) {
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/7f98a630-9240-49f7-8c79-e0c391d12a20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:102',message:'Error in /api/load-author',data:{errorMessage:error.message,errorName:error.name,errorStack:error.stack?.substring(0,200),headersSent:res.headersSent},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B,C,D'})}).catch(()=>{});
-    // #endregion
     console.error('Error loading author knowledge:', error);
     res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
     res.end();
@@ -189,53 +135,17 @@ app.post('/api/greeting', async (req, res) => {
 
 // Chat endpoint
 app.post('/api/chat', async (req, res) => {
-  // #region agent log
-  fetch('http://127.0.0.1:7243/ingest/7f98a630-9240-49f7-8c79-e0c391d12a20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:161',message:'/api/chat endpoint called',data:{hasConversation:!!req.body?.conversation,conversationLength:req.body?.conversation?.length,hasApiKey:!!process.env.GOOGLE_API_KEY},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-  // #endregion
   const { bookTitle, bookAuthor, authorKnowledge, conversation } = req.body;
 
-  // Validate inputs BEFORE setting headers
   if (!conversation || !Array.isArray(conversation)) {
     return res.status(400).json({ error: 'Conversation array is required' });
   }
 
-  // Validate Google API key before starting
-  if (!process.env.GOOGLE_API_KEY) {
-    return res.status(500).json({ error: 'Google API key is not configured' });
-  }
-
-  if (!genAI) {
-    return res.status(500).json({ error: 'Google AI client not initialized' });
-  }
-
-  // Set headers for streaming IMMEDIATELY before any async operations
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
-  res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering
-
   try {
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/7f98a630-9240-49f7-8c79-e0c391d12a20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:185',message:'Before getGenerativeModel in chat',data:{hasGenAI:!!genAI,hasApiKey:!!process.env.GOOGLE_API_KEY},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-    // #endregion
-    
-    let model;
-    try {
-      model = genAI.getGenerativeModel({ model: 'gemini-3-flash-preview' });
-    } catch (modelError) {
-      console.error('Failed to get generative model:', modelError);
-      res.write(`data: ${JSON.stringify({ error: 'Failed to initialize AI model: ' + modelError.message })}\n\n`);
-      res.write('data: [DONE]\n\n');
-      res.end();
-      return;
-    }
+    const model = genAI.getGenerativeModel({ model: 'gemini-3-flash-preview' });
 
     // Build the author persona prompt
-    // Ensure bookAuthor and bookTitle are strings and properly formatted
-    const safeBookAuthor = (bookAuthor && typeof bookAuthor === 'string') ? bookAuthor.trim() : 'the author';
-    const safeBookTitle = (bookTitle && typeof bookTitle === 'string') ? bookTitle.trim() : 'this book';
-    
-    let systemInstruction = `You are ${safeBookAuthor} of "${safeBookTitle}". You are having a personal conversation with a reader about your book.
+    let systemInstruction = `You are ${bookAuthor || 'the author'} of "${bookTitle}". You are having a personal conversation with a reader about your book.
 
 CRITICAL INSTRUCTIONS - HOW TO EMBODY THE AUTHOR:
 
@@ -268,204 +178,41 @@ ${authorKnowledge}
 Remember: Be the author. Adapt fluidly to what they need. Make this feel like a genuine conversation with the person who wrote the book.`;
 
     // Map conversation to Gemini format
-    // Filter to ensure history starts with a user message (Gemini requirement)
-    const conversationHistory = conversation.slice(0, -1);
-    
-    // Find the first user message index
-    let firstUserIndex = -1;
-    for (let i = 0; i < conversationHistory.length; i++) {
-      if (conversationHistory[i].role === 'user') {
-        firstUserIndex = i;
-        break;
-      }
-    }
-    
-    // Build history starting from first user message
-    let history = [];
-    if (firstUserIndex >= 0) {
-      // Only include messages from the first user message onwards
-      const filteredHistory = conversationHistory.slice(firstUserIndex);
-      history = filteredHistory.map(msg => ({
-        role: msg.role === 'user' ? 'user' : 'model',
-        parts: [{ text: msg.content }],
-      }));
-      
-      // Double-check: ensure first message is from user (Gemini requirement)
-      if (history.length > 0 && history[0].role !== 'user') {
-        console.warn('History does not start with user message, clearing history');
-        history = [];
-      }
-    }
-    
-    // Log for debugging
-    console.log('Conversation history mapping:', {
-      totalMessages: conversation.length,
-      historyLength: conversationHistory.length,
-      firstUserIndex,
-      mappedHistoryLength: history.length,
-      firstHistoryRole: history[0]?.role,
-      lastHistoryRole: history[history.length - 1]?.role,
-      conversationRoles: conversationHistory.map(m => m.role)
+    const history = conversation.slice(0, -1).map(msg => ({
+      role: msg.role === 'user' ? 'user' : 'model',
+      parts: [{ text: msg.content }],
+    }));
+
+    const lastMessage = conversation[conversation.length - 1].content;
+
+    const chat = model.startChat({
+      history: history,
+      systemInstruction: systemInstruction,
     });
 
-    const lastMessage = conversation[conversation.length - 1]?.content;
-    
-    if (!lastMessage || typeof lastMessage !== 'string') {
-      res.write(`data: ${JSON.stringify({ error: 'Last message is required and must be a string' })}\n\n`);
-      res.write('data: [DONE]\n\n');
-      res.end();
-      return;
+    // Set headers for streaming
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+
+    const result = await chat.sendMessageStream(lastMessage);
+
+    for await (const chunk of result.stream) {
+      const chunkText = chunk.text();
+      res.write(`data: ${JSON.stringify({ text: chunkText })}\n\n`);
     }
 
-    // Instead of using systemInstruction in startChat (which seems to have issues),
-    // we'll prepend it to the first user message in history if history is empty,
-    // or include it as context in the lastMessage
-    let messageToSend = lastMessage;
-    if (history.length === 0) {
-      // No history, so include system instruction in the first message
-      messageToSend = `${systemInstruction}\n\nNow, please respond to this message: ${lastMessage}`;
-    } else {
-      // Has history, so we can use the system instruction as context in the message
-      messageToSend = `[Context: ${systemInstruction.substring(0, 1000)}...]\n\n${lastMessage}`;
-    }
-
-    let chat;
-    try {
-      console.log('Starting chat:', {
-        historyLength: history.length,
-        systemInstructionLength: systemInstruction.length,
-        firstHistoryRole: history[0]?.role,
-        bookTitle: bookTitle?.substring(0, 50),
-        bookAuthor: bookAuthor?.substring(0, 50),
-        messageToSendLength: messageToSend.length
-      });
-      
-      // Build chat config - don't use systemInstruction parameter
-      const chatConfig = {
-        history: history,
-      };
-      
-      chat = model.startChat(chatConfig);
-    } catch (chatError) {
-      console.error('Failed to start chat:', {
-        error: chatError.message,
-        name: chatError.name,
-        stack: chatError.stack?.substring(0, 500)
-      });
-      res.write(`data: ${JSON.stringify({ error: 'Failed to start chat: ' + chatError.message })}\n\n`);
-      res.write('data: [DONE]\n\n');
-      res.end();
-      return;
-    }
-
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/7f98a630-9240-49f7-8c79-e0c391d12a20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:218',message:'Before sendMessageStream call',data:{hasChat:!!chat,lastMessageLength:lastMessage?.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-    // #endregion
-    
-    let result;
-    try {
-      result = await chat.sendMessageStream(messageToSend);
-    } catch (streamError) {
-      console.error('Failed to send message stream:', streamError);
-      res.write(`data: ${JSON.stringify({ error: 'Failed to start stream: ' + streamError.message })}\n\n`);
-      res.write('data: [DONE]\n\n');
-      res.end();
-      return;
-    }
-    
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/7f98a630-9240-49f7-8c79-e0c391d12a20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:230',message:'After sendMessageStream call',data:{hasResult:!!result,hasStream:!!result?.stream},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-    // #endregion
-
-    // Set up timeout to prevent hanging streams (60 seconds)
-    const streamTimeout = setTimeout(() => {
-      console.error('Stream timeout after 60 seconds');
-      if (!res.destroyed && !res.closed) {
-        res.write(`data: ${JSON.stringify({ error: 'Stream timeout - response took too long' })}\n\n`);
-        res.write('data: [DONE]\n\n');
-        res.end();
-      }
-    }, 60000);
-
-    // Set up keepalive to prevent connection timeout (every 30 seconds)
-    const keepAliveInterval = setInterval(() => {
-      if (!res.destroyed && !res.closed) {
-        try {
-          res.write(': keepalive\n\n');
-        } catch (e) {
-          clearInterval(keepAliveInterval);
-          clearTimeout(streamTimeout);
-        }
-      } else {
-        clearInterval(keepAliveInterval);
-        clearTimeout(streamTimeout);
-      }
-    }, 30000);
-
-    try {
-      for await (const chunk of result.stream) {
-        const chunkText = chunk.text();
-        if (chunkText) {
-          res.write(`data: ${JSON.stringify({ text: chunkText })}\n\n`);
-        }
-      }
-      clearTimeout(streamTimeout);
-      clearInterval(keepAliveInterval);
-      res.write('data: [DONE]\n\n');
-      res.end();
-    } catch (streamError) {
-      console.error('Stream error:', streamError);
-      clearTimeout(streamTimeout);
-      clearInterval(keepAliveInterval);
-      if (!res.destroyed && !res.closed) {
-        res.write(`data: ${JSON.stringify({ error: 'Stream interrupted: ' + streamError.message })}\n\n`);
-        res.write('data: [DONE]\n\n');
-        res.end();
-      }
-    }
+    res.write('data: [DONE]\n\n');
+    res.end();
 
   } catch (error) {
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/7f98a630-9240-49f7-8c79-e0c391d12a20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:260',message:'Error in /api/chat',data:{errorMessage:error.message,errorName:error.name,errorStack:error.stack?.substring(0,200),headersSent:res.headersSent},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B,C,D'})}).catch(()=>{});
-    // #endregion
-    console.error('API Error in /api/chat:', {
-      message: error.message,
-      name: error.name,
-      stack: error.stack,
-      headersSent: res.headersSent,
-      destroyed: res.destroyed
-    });
-    // Headers are already set, so send error via SSE
-    try {
-      if (!res.destroyed && !res.closed) {
-        res.write(`data: ${JSON.stringify({ error: error.message || 'An error occurred' })}\n\n`);
-        res.write('data: [DONE]\n\n');
-        res.end();
-      }
-    } catch (writeError) {
-      // If write fails, connection might be closed
-      console.error('Failed to write error to stream:', writeError);
-      if (!res.headersSent) {
-        res.status(500).json({ error: error.message });
-      }
-    }
-  }
-});
-
-// Error handling middleware - must be after all routes
-app.use((err, req, res, next) => {
-  console.error('Unhandled error:', err);
-  if (res.headersSent) {
-    // If headers already sent (streaming), try to send error via SSE
-    try {
-      res.write(`data: ${JSON.stringify({ error: err.message || 'An unexpected error occurred' })}\n\n`);
-      res.write('data: [DONE]\n\n');
+    console.error('API Error:', error);
+    if (!res.headersSent) {
+      res.status(500).json({ error: error.message });
+    } else {
+      res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
       res.end();
-    } catch (writeError) {
-      console.error('Failed to write error after headers sent:', writeError);
     }
-  } else {
-    res.status(500).json({ error: err.message || 'An unexpected error occurred' });
   }
 });
 
