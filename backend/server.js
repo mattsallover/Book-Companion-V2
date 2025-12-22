@@ -43,6 +43,30 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', message: 'Book Companion API is running' });
 });
 
+// Test Google API endpoint (for debugging)
+app.get('/api/test-google', async (req, res) => {
+  try {
+    if (!genAI) {
+      return res.status(500).json({ error: 'Google AI client not initialized', hasApiKey: !!process.env.GOOGLE_API_KEY });
+    }
+    const model = genAI.getGenerativeModel({ model: 'gemini-3-flash-preview' });
+    const result = await model.generateContent('Say "Hello, API is working!"');
+    res.json({ 
+      status: 'success', 
+      response: result.response.text(),
+      hasApiKey: !!process.env.GOOGLE_API_KEY 
+    });
+  } catch (error) {
+    console.error('Test Google API error:', error);
+    res.status(500).json({ 
+      error: error.message, 
+      name: error.name,
+      hasApiKey: !!process.env.GOOGLE_API_KEY,
+      hasGenAI: !!genAI
+    });
+  }
+});
+
 // Authentication routes
 app.use('/api/auth', authRoutes);
 
