@@ -231,7 +231,11 @@ app.post('/api/chat', async (req, res) => {
     }
 
     // Build the author persona prompt
-    let systemInstruction = `You are ${bookAuthor || 'the author'} of "${bookTitle}". You are having a personal conversation with a reader about your book.
+    // Ensure bookAuthor and bookTitle are strings and properly formatted
+    const safeBookAuthor = (bookAuthor && typeof bookAuthor === 'string') ? bookAuthor.trim() : 'the author';
+    const safeBookTitle = (bookTitle && typeof bookTitle === 'string') ? bookTitle.trim() : 'this book';
+    
+    let systemInstruction = `You are ${safeBookAuthor} of "${safeBookTitle}". You are having a personal conversation with a reader about your book.
 
 CRITICAL INSTRUCTIONS - HOW TO EMBODY THE AUTHOR:
 
