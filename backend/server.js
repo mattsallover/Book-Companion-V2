@@ -168,9 +168,20 @@ app.post('/api/chat', async (req, res) => {
     return res.status(400).json({ error: 'Conversation array is required' });
   }
 
+  // Validate Google API key before starting
+  if (!process.env.GOOGLE_API_KEY) {
+    return res.status(500).json({ error: 'Google API key is not configured' });
+  }
+
+  // Set headers for streaming IMMEDIATELY before any async operations
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering
+
   try {
     // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/7f98a630-9240-49f7-8c79-e0c391d12a20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:145',message:'Before getGenerativeModel in chat',data:{hasGenAI:!!genAI},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    fetch('http://127.0.0.1:7243/ingest/7f98a630-9240-49f7-8c79-e0c391d12a20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:175',message:'Before getGenerativeModel in chat',data:{hasGenAI:!!genAI,hasApiKey:!!process.env.GOOGLE_API_KEY},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
     // #endregion
     const model = genAI.getGenerativeModel({ model: 'gemini-3-flash-preview' });
 
@@ -213,20 +224,19 @@ Remember: Be the author. Adapt fluidly to what they need. Make this feel like a 
       parts: [{ text: msg.content }],
     }));
 
-    const lastMessage = conversation[conversation.length - 1].content;
+    const lastMessage = conversation[conversation.length - 1]?.content;
+    
+    if (!lastMessage || typeof lastMessage !== 'string') {
+      res.write(`data: ${JSON.stringify({ error: 'Last message is required and must be a string' })}\n\n`);
+      res.write('data: [DONE]\n\n');
+      res.end();
+      return;
+    }
 
     const chat = model.startChat({
       history: history,
       systemInstruction: systemInstruction,
     });
-
-    // Set headers for streaming
-    // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/7f98a630-9240-49f7-8c79-e0c391d12a20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:194',message:'Setting streaming headers in chat',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-    // #endregion
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
 
     // #region agent log
     fetch('http://127.0.0.1:7243/ingest/7f98a630-9240-49f7-8c79-e0c391d12a20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:198',message:'Before sendMessageStream call',data:{hasChat:!!chat,lastMessageLength:lastMessage?.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
@@ -236,24 +246,38 @@ Remember: Be the author. Adapt fluidly to what they need. Make this feel like a 
     fetch('http://127.0.0.1:7243/ingest/7f98a630-9240-49f7-8c79-e0c391d12a20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:199',message:'After sendMessageStream call',data:{hasResult:!!result,hasStream:!!result?.stream},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
     // #endregion
 
-    for await (const chunk of result.stream) {
-      const chunkText = chunk.text();
-      res.write(`data: ${JSON.stringify({ text: chunkText })}\n\n`);
+    try {
+      for await (const chunk of result.stream) {
+        const chunkText = chunk.text();
+        if (chunkText) {
+          res.write(`data: ${JSON.stringify({ text: chunkText })}\n\n`);
+        }
+      }
+      res.write('data: [DONE]\n\n');
+      res.end();
+    } catch (streamError) {
+      console.error('Stream error:', streamError);
+      res.write(`data: ${JSON.stringify({ error: 'Stream interrupted: ' + streamError.message })}\n\n`);
+      res.write('data: [DONE]\n\n');
+      res.end();
     }
-
-    res.write('data: [DONE]\n\n');
-    res.end();
 
   } catch (error) {
     // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/7f98a630-9240-49f7-8c79-e0c391d12a20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:208',message:'Error in /api/chat',data:{errorMessage:error.message,errorName:error.name,errorStack:error.stack?.substring(0,200),headersSent:res.headersSent},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B,C,D'})}).catch(()=>{});
+    fetch('http://127.0.0.1:7243/ingest/7f98a630-9240-49f7-8c79-e0c391d12a20',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:247',message:'Error in /api/chat',data:{errorMessage:error.message,errorName:error.name,errorStack:error.stack?.substring(0,200),headersSent:res.headersSent},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B,C,D'})}).catch(()=>{});
     // #endregion
     console.error('API Error:', error);
-    if (!res.headersSent) {
-      res.status(500).json({ error: error.message });
-    } else {
-      res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
+    // Headers are already set, so send error via SSE
+    try {
+      res.write(`data: ${JSON.stringify({ error: error.message || 'An error occurred' })}\n\n`);
+      res.write('data: [DONE]\n\n');
       res.end();
+    } catch (writeError) {
+      // If write fails, connection might be closed
+      console.error('Failed to write error to stream:', writeError);
+      if (!res.headersSent) {
+        res.status(500).json({ error: error.message });
+      }
     }
   }
 });
