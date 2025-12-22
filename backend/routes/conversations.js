@@ -9,7 +9,9 @@ router.get('/', requireAuth, async (req, res) => {
     try {
         const result = await db.query(
             `SELECT c.id, c.book_title, c.book_author, c.created_at, c.updated_at,
-              COUNT(m.id) as message_count
+              COUNT(m.id) as message_count,
+              (SELECT content FROM messages WHERE conversation_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message_content,
+              (SELECT created_at FROM messages WHERE conversation_id = c.id ORDER BY created_at DESC LIMIT 1) as last_message_time
        FROM conversations c
        LEFT JOIN messages m ON c.id = m.conversation_id
        WHERE c.user_id = $1
