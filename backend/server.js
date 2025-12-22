@@ -319,31 +319,32 @@ Remember: Be the author. Adapt fluidly to what they need. Make this feel like a 
 
     let chat;
     try {
-      // Escape quotes in systemInstruction to prevent parsing errors
-      const sanitizedSystemInstruction = systemInstruction
-        .replace(/"/g, "'")  // Replace double quotes with single quotes
-        .replace(/\n{3,}/g, '\n\n');  // Limit consecutive newlines
-      
-      // Limit system instruction length (Gemini has limits)
-      const maxLength = 30000;
-      const truncatedInstruction = sanitizedSystemInstruction.length > maxLength
-        ? sanitizedSystemInstruction.substring(0, maxLength) + '\n\n[Instruction truncated due to length]'
-        : sanitizedSystemInstruction;
+      // Instead of using systemInstruction in startChat (which seems to have issues),
+      // we'll prepend it to the first user message in history if history is empty,
+      // or include it as context in the lastMessage
       
       console.log('Starting chat:', {
         historyLength: history.length,
-        systemInstructionLength: truncatedInstruction.length,
-        firstHistoryRole: history[0]?.role
+        systemInstructionLength: systemInstruction.length,
+        firstHistoryRole: history[0]?.role,
+        bookTitle: bookTitle?.substring(0, 50),
+        bookAuthor: bookAuthor?.substring(0, 50)
       });
       
-      // Build chat config
+      // Build chat config - don't use systemInstruction parameter
       const chatConfig = {
         history: history,
       };
       
-      // Only add systemInstruction if it's valid
-      if (truncatedInstruction && truncatedInstruction.trim().length > 0) {
-        chatConfig.systemInstruction = truncatedInstruction;
+      // If no history, prepend system instruction to the message
+      // Otherwise, include it in the lastMessage
+      let messageToSend = lastMessage;
+      if (history.length === 0) {
+        // No history, so include system instruction in the first message
+        messageToSend = `${systemInstruction}\n\nNow, please respond to this message: ${lastMessage}`;
+      } else {
+        // Has history, so we can use the system instruction as context in the message
+        messageToSend = `[Context: ${systemInstruction.substring(0, 1000)}...]\n\n${lastMessage}`;
       }
       
       chat = model.startChat(chatConfig);
@@ -365,7 +366,7 @@ Remember: Be the author. Adapt fluidly to what they need. Make this feel like a 
     
     let result;
     try {
-      result = await chat.sendMessageStream(lastMessage);
+      result = await chat.sendMessageStream(messageToSend);
     } catch (streamError) {
       console.error('Failed to send message stream:', streamError);
       res.write(`data: ${JSON.stringify({ error: 'Failed to start stream: ' + streamError.message })}\n\n`);
