@@ -44,7 +44,14 @@ const BookCompanion = () => {
       } catch (error) {
         console.error('Invalid token:', error);
         localStorage.removeItem('authToken');
+        setAuthToken(null);
+        setUser(null);
+        // Show sign-in modal if token is invalid
+        setShowAuthModal(true);
       }
+    } else {
+      // No token - show sign-in modal immediately
+      setShowAuthModal(true);
     }
 
     // Check if this is a magic link verification
@@ -607,6 +614,78 @@ const BookCompanion = () => {
     fileInputRef.current.click();
   };
 
+  // If user is not authenticated, show only the sign-in page
+  if (!user || !authToken) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center p-6">
+        <div className="max-w-md w-full">
+          {/* Header */}
+          <div className="text-center mb-8">
+            <div className="flex items-center justify-center gap-3 mb-4">
+              <BookOpen className="w-10 h-10 text-purple-300" />
+              <Sparkles className="w-6 h-6 text-yellow-300" />
+              <h1 className="text-4xl font-bold text-white">Chat with the Author</h1>
+            </div>
+            <p className="text-purple-200">Have a personal conversation with the author of any book</p>
+          </div>
+
+          {/* Sign In Form - Always visible on landing page */}
+          <div className="bg-slate-800 rounded-lg p-8 border border-white/20">
+            <h2 className="text-2xl font-bold text-white mb-4 text-center">Sign in to Book Companion</h2>
+
+            {authStatus === 'sent' ? (
+              <div className="text-center">
+                <Mail className="w-16 h-16 text-purple-400 mx-auto mb-4" />
+                <p className="text-white mb-2">Check your email!</p>
+                <p className="text-purple-200 text-sm mb-4">
+                  We've sent a magic link to <strong>{authEmail}</strong>
+                </p>
+                <p className="text-purple-300 text-xs mb-6">
+                  Click the link in your email to sign in. The link expires in 15 minutes.
+                </p>
+                <button
+                  onClick={() => { setAuthStatus('idle'); setAuthEmail(''); }}
+                  className="text-purple-300 hover:text-white text-sm"
+                >
+                  Try different email
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={sendMagicLink}>
+                <p className="text-purple-200 mb-4 text-center">
+                  Enter your email to receive a magic link. No password needed!
+                </p>
+                <input
+                  type="email"
+                  value={authEmail}
+                  onChange={(e) => setAuthEmail(e.target.value)}
+                  placeholder="your@email.com"
+                  required
+                  autoFocus
+                  className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-purple-300 mb-4"
+                />
+                <button
+                  type="submit"
+                  disabled={authStatus === 'sending'}
+                  className="w-full px-4 py-3 bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 disabled:from-gray-500 disabled:to-gray-600 text-white rounded-lg transition font-semibold flex items-center justify-center gap-2"
+                >
+                  {authStatus === 'sending' ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Sending...
+                    </>
+                  ) : (
+                    'Send Magic Link'
+                  )}
+                </button>
+              </form>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 p-6">
       <div className="max-w-4xl mx-auto">
@@ -619,32 +698,20 @@ const BookCompanion = () => {
               <h1 className="text-4xl font-bold text-white">Chat with the Author</h1>
             </div>
             <div className="flex items-center gap-3">
-              {user ? (
-                <>
-                  <span className="text-purple-200 text-sm">{user.email}</span>
-                  <button
-                    onClick={logout}
-                    className="text-purple-200 hover:text-white transition-colors text-sm px-4 py-2 bg-white/10 rounded-lg hover:bg-white/20 flex items-center gap-2"
-                  >
-                    <LogOut className="w-4 h-4" />
-                    Logout
-                  </button>
-                </>
-              ) : (
-                <button
-                  onClick={() => setShowAuthModal(true)}
-                  className="text-purple-200 hover:text-white transition-colors text-sm px-4 py-2 bg-white/10 rounded-lg hover:bg-white/20 flex items-center gap-2"
-                >
-                  <Mail className="w-4 h-4" />
-                  Sign In
-                </button>
-              )}
+              <span className="text-purple-200 text-sm">{user.email}</span>
+              <button
+                onClick={logout}
+                className="text-purple-200 hover:text-white transition-colors text-sm px-4 py-2 bg-white/10 rounded-lg hover:bg-white/20 flex items-center gap-2"
+              >
+                <LogOut className="w-4 h-4" />
+                Logout
+              </button>
             </div>
           </div>
           <p className="text-purple-200">Have a personal conversation with the author of any book</p>
         </div>
 
-        {/* Magic Link Auth Modal */}
+        {/* Magic Link Auth Modal - Only shown if somehow triggered while authenticated */}
         {showAuthModal && (
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
             <div className="bg-slate-800 rounded-lg p-8 max-w-md w-full border border-white/20">
