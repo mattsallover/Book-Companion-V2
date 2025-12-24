@@ -31,6 +31,12 @@ const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY)
 app.use(cors())
 app.use(express.json())
 
+// Request logging middleware
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`)
+  next()
+})
+
 // Auth middleware
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization']
