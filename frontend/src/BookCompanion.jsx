@@ -73,6 +73,8 @@ function BookCompanion() {
   const [inputMessage, setInputMessage] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [view, setView] = useState('list') // 'list' | 'chat'
+  const [searchQuery, setSearchQuery] = useState('')
+  const [swipedConvId, setSwipedConvId] = useState(null)
 
   const [showBookModal, setShowBookModal] = useState(false)
   const [bookTitle, setBookTitle] = useState('')
@@ -246,6 +248,25 @@ function BookCompanion() {
     } finally {
       setIsLoading(false)
       setResearchStatus('')
+    }
+  }
+
+  // Delete conversation
+  const deleteConversation = async (convId) => {
+    if (!confirm('Delete this conversation?')) return
+
+    try {
+      const response = await fetch(`${API_URL}/api/conversations/${convId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${getToken()}` }
+      })
+
+      if (response.ok) {
+        setConversations(conversations.filter(c => c.id !== convId))
+        setSwipedConvId(null)
+      }
+    } catch (error) {
+      console.error('Error deleting conversation:', error)
     }
   }
 
@@ -453,6 +474,13 @@ function BookCompanion() {
 
   // Conversation List View
   if (view === 'list') {
+    // Filter conversations based on search query
+    const filteredConversations = conversations.filter(conv =>
+      conv.book_title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      conv.book_author.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (conv.last_message && conv.last_message.toLowerCase().includes(searchQuery.toLowerCase()))
+    )
+
     return (
       <div className="flex flex-col h-full bg-ios-bg">
         {/* Header */}
@@ -465,6 +493,19 @@ function BookCompanion() {
             <Plus className="w-5 h-5 text-white" />
           </button>
         </div>
+
+        {/* Search Bar */}
+        {conversations.length > 0 && (
+          <div className="px-4 py-3 bg-ios-bg">
+            <input
+              type="text"
+              placeholder="Search conversations"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full bg-white rounded-lg px-4 py-2 text-sm border-none focus:outline-none focus:ring-2 focus:ring-ios-blue"
+            />
+          </div>
+        )}
 
         {/* Conversations List */}
         <div className="flex-1 overflow-y-auto ios-scroll">
@@ -484,13 +525,21 @@ function BookCompanion() {
                 Start Conversation
               </button>
             </div>
+          ) : filteredConversations.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full px-8 text-center">
+              <p className="text-ios-gray">No conversations found</p>
+            </div>
           ) : (
-            conversations.map((conv) => (
-              <button
-                key={conv.id}
-                onClick={() => loadConversation(conv)}
-                className="w-full bg-white border-b border-gray-200 px-4 py-3 flex items-center space-x-3 hover:bg-gray-50 ios-button text-left"
-              >
+            filteredConversations.map((conv) => (
+              <div key={conv.id} className="relative">
+                <button
+                  onClick={() => loadConversation(conv)}
+                  onContextMenu={(e) => {
+                    e.preventDefault()
+                    setSwipedConvId(swipedConvId === conv.id ? null : conv.id)
+                  }}
+                  className="w-full bg-white border-b border-gray-200 px-4 py-3 flex items-center space-x-3 hover:bg-gray-50 ios-button text-left"
+                >
                 {/* Avatar */}
                 <div
                   className="w-12 h-12 rounded-full flex items-center justify-center text-white font-semibold text-lg flex-shrink-0"
@@ -515,6 +564,17 @@ function BookCompanion() {
                   )}
                 </div>
               </button>
+
+              {/* Delete button (shows on long-press/right-click) */}
+              {swipedConvId === conv.id && (
+                <button
+                  onClick={() => deleteConversation(conv.id)}
+                  className="absolute right-4 top-1/2 transform -translate-y-1/2 bg-red-500 text-white px-4 py-2 rounded-lg font-medium text-sm ios-button"
+                >
+                  Delete
+                </button>
+              )}
+            </div>
             ))
           )}
         </div>
@@ -566,6 +626,10 @@ function BookCompanion() {
           const showTimestamp = index === 0 || messages[index - 1]?.role !== message.role
           const timestamp = message.created_at ? formatTime(message.created_at) : 'Just now'
 
+          // Check if this is the last message in a group (show tail)
+          const isLastInGroup = index === messages.length - 1 || messages[index + 1]?.role !== message.role
+          const tailClass = isLastInGroup ? (message.role === 'user' ? 'message-tail-user' : 'message-tail-assistant') : ''
+
           return (
             <div key={index}>
               {/* Timestamp */}
@@ -582,7 +646,7 @@ function BookCompanion() {
                 className={`flex ${index > 0 && messages[index - 1]?.role === message.role ? 'mb-1' : 'mb-3'} message-bubble ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
               >
                 <div
-                  className={`max-w-[75%] rounded-2xl px-4 py-2 ${
+                  className={`relative max-w-[75%] rounded-2xl px-4 py-2 ${tailClass} ${
                     message.role === 'user'
                       ? 'bg-ios-blue text-white'
                       : 'bg-ios-bubble-gray text-black'

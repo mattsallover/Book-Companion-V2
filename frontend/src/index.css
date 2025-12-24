@@ -58,6 +58,51 @@ body {
   animation: messageSlideIn 0.2s ease-out;
 }
 
+/* Message bubble tails */
+.message-tail-user::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  right: -8px;
+  width: 20px;
+  height: 20px;
+  background: #007AFF;
+  border-bottom-left-radius: 16px;
+}
+
+.message-tail-user::before {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  right: -10px;
+  width: 10px;
+  height: 20px;
+  background: #F2F2F7;
+  border-bottom-left-radius: 10px;
+}
+
+.message-tail-assistant::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: -8px;
+  width: 20px;
+  height: 20px;
+  background: #E9E9EB;
+  border-bottom-right-radius: 16px;
+}
+
+.message-tail-assistant::before {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: -10px;
+  width: 10px;
+  height: 20px;
+  background: #F2F2F7;
+  border-bottom-right-radius: 10px;
+}
+
 /* iOS-style button press effect */
 .ios-button:active {
   opacity: 0.7;
