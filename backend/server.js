@@ -252,9 +252,7 @@ app.post('/api/load-author', authenticateToken, async (req, res) => {
 
     res.write(`data: ${JSON.stringify({ status: 'Researching book and author...' })}\n\n`)
 
-    const prompt = `Research the book "${bookTitle}" by ${bookAuthor}. First, identify the CORRECT canonical spelling and formatting of the book title and author name (in case of typos).
-
-Then provide:
+    const prompt = `Research the book "${bookTitle}" by ${bookAuthor}. Provide:
 1. Main arguments, frameworks, and key ideas from the book
 2. Author's background, expertise, and philosophy
 3. CRITICAL: Author's DISTINCTIVE VOICE AND WRITING STYLE:
@@ -272,8 +270,6 @@ Then generate 3 thought-provoking question starters that readers might ask the a
 
 Return your response as JSON in this exact format:
 {
-  "correctTitle": "The exact correct book title",
-  "correctAuthor": "The exact correct author name",
   "knowledge": "detailed knowledge about the book, author, and ESPECIALLY their distinctive voice and communication style with specific examples",
   "questionStarters": ["question 1", "question 2", "question 3"]
 }`
@@ -286,13 +282,7 @@ Return your response as JSON in this exact format:
     const jsonMatch = text.match(/\{[\s\S]*\}/)
     if (jsonMatch) {
       const data = JSON.parse(jsonMatch[0])
-      // Send corrected names along with other data
-      res.write(`data: ${JSON.stringify({
-        correctTitle: data.correctTitle || bookTitle,
-        correctAuthor: data.correctAuthor || bookAuthor,
-        knowledge: data.knowledge,
-        questionStarters: data.questionStarters
-      })}\n\n`)
+      res.write(`data: ${JSON.stringify(data)}\n\n`)
     }
 
     res.end()
