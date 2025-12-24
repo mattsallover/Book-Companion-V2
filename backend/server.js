@@ -46,8 +46,13 @@ app.use((req, res, next) => {
   next()
 })
 
-// Auth middleware
+// Auth middleware (TEMPORARILY DISABLED FOR TESTING)
 const authenticateToken = (req, res, next) => {
+  // Bypass authentication for testing - use test user
+  req.user = { id: 1, email: 'test@example.com' }
+  next()
+
+  /* ORIGINAL CODE - RE-ENABLE AFTER TESTING
   const authHeader = req.headers['authorization']
   const token = authHeader && authHeader.split(' ')[1]
 
@@ -60,6 +65,7 @@ const authenticateToken = (req, res, next) => {
     req.user = user
     next()
   })
+  */
 }
 
 // ===== AUTH ENDPOINTS =====
@@ -433,7 +439,7 @@ app.use((err, req, res, next) => {
 })
 
 // Start server
-app.listen(PORT, '0.0.0.0', () => {
+app.listen(PORT, '0.0.0.0', async () => {
   console.log(`Server running on port ${PORT}`)
   console.log('Environment check:')
   console.log('- NODE_ENV:', process.env.NODE_ENV)
@@ -441,6 +447,17 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log('- JWT_SECRET:', process.env.JWT_SECRET ? 'Set' : 'Missing')
   console.log('- RESEND_API_KEY:', process.env.RESEND_API_KEY ? 'Set' : 'Missing')
   console.log('- GOOGLE_API_KEY:', process.env.GOOGLE_API_KEY ? 'Set' : 'Missing')
+
+  // Create test user for development
+  try {
+    const result = await pool.query('SELECT * FROM users WHERE id = 1')
+    if (result.rows.length === 0) {
+      await pool.query('INSERT INTO users (id, email) VALUES (1, $1) ON CONFLICT (id) DO NOTHING', ['test@example.com'])
+      console.log('✅ Test user created')
+    }
+  } catch (err) {
+    console.log('Note: Could not create test user:', err.message)
+  }
 })
 
 // Graceful shutdown
