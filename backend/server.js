@@ -392,6 +392,26 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok' })
 })
 
+// Debug endpoint to check files
+app.get('/api/debug', (req, res) => {
+  const fs = require('fs')
+  const frontendPath = path.join(__dirname, '../frontend/dist')
+
+  try {
+    const exists = fs.existsSync(frontendPath)
+    const files = exists ? fs.readdirSync(frontendPath) : []
+    res.json({
+      frontendPath,
+      exists,
+      files,
+      cwd: process.cwd(),
+      __dirname
+    })
+  } catch (error) {
+    res.json({ error: error.message })
+  }
+})
+
 // Serve static frontend files in production
 if (process.env.NODE_ENV === 'production') {
   const frontendPath = path.join(__dirname, '../frontend/dist')
