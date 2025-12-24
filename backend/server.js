@@ -2,12 +2,11 @@ import express from 'express'
 import cors from 'cors'
 import pg from 'pg'
 import jwt from 'jsonwebtoken'
-import { Resend } from 'resend'
+import bcrypt from 'bcrypt'
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import dotenv from 'dotenv'
 import path from 'path'
 import { fileURLToPath } from 'url'
-import crypto from 'crypto'
 
 dotenv.config()
 
@@ -24,11 +23,8 @@ const pool = new pg.Pool({
 })
 
 // Initialize services
-let resend, genAI
+let genAI
 try {
-  if (process.env.RESEND_API_KEY) {
-    resend = new Resend(process.env.RESEND_API_KEY)
-  }
   if (process.env.GOOGLE_API_KEY) {
     genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY)
   }
@@ -46,100 +42,111 @@ app.use((req, res, next) => {
   next()
 })
 
-// Auth middleware (DISABLED FOR TESTING)
+// Auth middleware
 const authenticateToken = (req, res, next) => {
-  // Bypass authentication - use test user
-  req.user = { id: 1, email: 'test@example.com' }
-  next()
+  const authHeader = req.headers['authorization']
+  const token = authHeader && authHeader.split(' ')[1]
+
+  if (!token) {
+    return res.status(401).json({ error: 'Access token required' })
+  }
+
+  try {
+    const user = jwt.verify(token, process.env.JWT_SECRET)
+    req.user = user
+    next()
+  } catch (error) {
+    return res.status(403).json({ error: 'Invalid or expired token' })
+  }
 }
 
 // ===== AUTH ENDPOINTS =====
 
-// Send magic link
-app.post('/api/auth/send-magic-link', async (req, res) => {
-  const { email } = req.body
+// Sign up
+app.post('/api/auth/signup', async (req, res) => {
+  const { username, password } = req.body
 
-  if (!email || !email.includes('@')) {
-    return res.status(400).json({ error: 'Valid email required' })
+  if (!username || !password) {
+    return res.status(400).json({ error: 'Username and password required' })
+  }
+
+  if (username.length < 3) {
+    return res.status(400).json({ error: 'Username must be at least 3 characters' })
+  }
+
+  if (password.length < 6) {
+    return res.status(400).json({ error: 'Password must be at least 6 characters' })
   }
 
   try {
-    // Generate token
-    const token = crypto.randomBytes(32).toString('hex')
-    const expiresAt = new Date(Date.now() + 15 * 60 * 1000) // 15 minutes
+    // Check if username exists
+    const existing = await pool.query('SELECT * FROM users WHERE username = $1', [username.toLowerCase()])
 
-    // Store token in database
-    await pool.query(
-      'INSERT INTO magic_link_tokens (email, token, expires_at) VALUES ($1, $2, $3)',
-      [email.toLowerCase(), token, expiresAt]
-    )
+    if (existing.rows.length > 0) {
+      return res.status(400).json({ error: 'Username already taken' })
+    }
 
-    // Send email
-    const magicLink = `${process.env.APP_URL || 'http://localhost:3000'}?token=${token}`
+    // Hash password
+    const passwordHash = await bcrypt.hash(password, 10)
 
-    await resend.emails.send({
-      from: process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev',
-      to: email,
-      subject: 'Sign in to Book Companion',
-      html: `
-        <h2>Sign in to Book Companion</h2>
-        <p>Click the link below to sign in:</p>
-        <p><a href="${magicLink}">Sign in to Book Companion</a></p>
-        <p>This link will expire in 15 minutes.</p>
-        <p>If you didn't request this, you can safely ignore this email.</p>
-      `
-    })
-
-    res.json({ success: true })
-  } catch (error) {
-    console.error('Error sending magic link:', error)
-    res.status(500).json({ error: 'Failed to send magic link' })
-  }
-})
-
-// Verify magic link (accessed via URL)
-app.get('/api/auth/verify/:token', async (req, res) => {
-  const { token } = req.params
-
-  try {
-    // Find and verify token
+    // Create user
     const result = await pool.query(
-      'SELECT * FROM magic_link_tokens WHERE token = $1 AND used = false AND expires_at > NOW()',
-      [token]
+      'INSERT INTO users (username, password_hash) VALUES ($1, $2) RETURNING id, username',
+      [username.toLowerCase(), passwordHash]
     )
 
-    if (result.rows.length === 0) {
-      return res.status(400).json({ error: 'Invalid or expired token' })
-    }
-
-    const { email } = result.rows[0]
-
-    // Mark token as used
-    await pool.query('UPDATE magic_link_tokens SET used = true WHERE token = $1', [token])
-
-    // Create or get user
-    let userResult = await pool.query('SELECT * FROM users WHERE email = $1', [email])
-
-    if (userResult.rows.length === 0) {
-      userResult = await pool.query(
-        'INSERT INTO users (email) VALUES ($1) RETURNING *',
-        [email]
-      )
-    }
-
-    const user = userResult.rows[0]
+    const user = result.rows[0]
 
     // Generate JWT
-    const jwtToken = jwt.sign(
-      { id: user.id, email: user.email },
+    const token = jwt.sign(
+      { id: user.id, username: user.username },
       process.env.JWT_SECRET,
       { expiresIn: '30d' }
     )
 
-    res.json({ token: jwtToken, user: { id: user.id, email: user.email } })
+    res.json({ token, user: { id: user.id, username: user.username } })
   } catch (error) {
-    console.error('Error verifying token:', error)
-    res.status(500).json({ error: 'Failed to verify token' })
+    console.error('Error signing up:', error)
+    res.status(500).json({ error: 'Failed to sign up' })
+  }
+})
+
+// Sign in
+app.post('/api/auth/signin', async (req, res) => {
+  const { username, password } = req.body
+
+  if (!username || !password) {
+    return res.status(400).json({ error: 'Username and password required' })
+  }
+
+  try {
+    // Find user
+    const result = await pool.query('SELECT * FROM users WHERE username = $1', [username.toLowerCase()])
+
+    if (result.rows.length === 0) {
+      return res.status(401).json({ error: 'Invalid username or password' })
+    }
+
+    const user = result.rows[0]
+
+    // Verify password
+    const validPassword = await bcrypt.compare(password, user.password_hash)
+
+    if (!validPassword) {
+      return res.status(401).json({ error: 'Invalid username or password' })
+    }
+
+    // Generate JWT
+    const token = jwt.sign(
+      { id: user.id, username: user.username },
+      process.env.JWT_SECRET,
+      { expiresIn: '30d' }
+    )
+
+    res.json({ token, user: { id: user.id, username: user.username } })
+  } catch (error) {
+    console.error('Error signing in:', error)
+    res.status(500).json({ error: 'Failed to sign in' })
   }
 })
 
@@ -439,10 +446,11 @@ app.listen(PORT, '0.0.0.0', async () => {
 
   // Create test user for testing
   try {
-    const result = await pool.query('SELECT * FROM users WHERE id = 1')
+    const result = await pool.query('SELECT * FROM users WHERE username = $1', ['testuser'])
     if (result.rows.length === 0) {
-      await pool.query('INSERT INTO users (id, email) VALUES (1, $1) ON CONFLICT (id) DO NOTHING', ['test@example.com'])
-      console.log('✅ Test user created')
+      const passwordHash = await bcrypt.hash('password123', 10)
+      await pool.query('INSERT INTO users (username, password_hash) VALUES ($1, $2)', ['testuser', passwordHash])
+      console.log('✅ Test user created (username: testuser, password: password123)')
     }
   } catch (err) {
     console.log('Note: Could not create test user:', err.message)

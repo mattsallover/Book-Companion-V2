@@ -28,7 +28,6 @@ async function initializeDatabase() {
     console.log('  - users')
     console.log('  - conversations')
     console.log('  - messages')
-    console.log('  - magic_link_tokens')
 
   } catch (error) {
     console.error('❌ Error initializing database:', error)

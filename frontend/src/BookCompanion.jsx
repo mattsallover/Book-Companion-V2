@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { ChevronLeft, Plus, Send, Book, Mail, Check, MessageCircle } from 'lucide-react'
+import { ChevronLeft, Plus, Send, MessageCircle } from 'lucide-react'
 
 const API_URL = import.meta.env.PROD ? '' : 'http://localhost:3000'
 
@@ -61,11 +61,13 @@ const TypingIndicator = () => (
 )
 
 function BookCompanion() {
-  const [isAuthenticated, setIsAuthenticated] = useState(true) // TESTING: Skip auth
-  const [showAuthModal, setShowAuthModal] = useState(false) // TESTING: Hide auth modal
-  const [authStep, setAuthStep] = useState('email') // 'email' | 'sent'
-  const [email, setEmail] = useState('')
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [showAuthModal, setShowAuthModal] = useState(true)
+  const [authMode, setAuthMode] = useState('signin') // 'signin' | 'signup'
+  const [username, setUsername] = useState('')
+  const [password, setPassword] = useState('')
   const [authLoading, setAuthLoading] = useState(false)
+  const [authError, setAuthError] = useState('')
 
   const [conversations, setConversations] = useState([])
   const [currentConversation, setCurrentConversation] = useState(null)
@@ -94,17 +96,6 @@ function BookCompanion() {
       setShowAuthModal(false)
       loadConversations()
     }
-
-    // Check for magic link token in URL
-    const params = new URLSearchParams(window.location.search)
-    const urlToken = params.get('token')
-    if (urlToken) {
-      localStorage.setItem('token', urlToken)
-      setIsAuthenticated(true)
-      setShowAuthModal(false)
-      window.history.replaceState({}, document.title, '/')
-      loadConversations()
-    }
   }, [])
 
   // Auto-scroll to bottom when messages change
@@ -127,26 +118,38 @@ function BookCompanion() {
     }
   }
 
-  // Send magic link
-  const sendMagicLink = async () => {
-    if (!email || !email.includes('@')) return
+  // Handle authentication (sign in or sign up)
+  const handleAuth = async (e) => {
+    e.preventDefault()
+    setAuthError('')
+
+    if (!username.trim() || !password.trim()) {
+      setAuthError('Please enter username and password')
+      return
+    }
 
     setAuthLoading(true)
     try {
-      const response = await fetch(`${API_URL}/api/auth/send-magic-link`, {
+      const endpoint = authMode === 'signin' ? '/api/auth/signin' : '/api/auth/signup'
+      const response = await fetch(`${API_URL}${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email })
+        body: JSON.stringify({ username, password })
       })
 
+      const data = await response.json()
+
       if (response.ok) {
-        setAuthStep('sent')
+        localStorage.setItem('token', data.token)
+        setIsAuthenticated(true)
+        setShowAuthModal(false)
+        loadConversations()
       } else {
-        alert('Failed to send magic link. Please try again.')
+        setAuthError(data.error || 'Authentication failed')
       }
     } catch (error) {
-      console.error('Error sending magic link:', error)
-      alert('Failed to send magic link. Please try again.')
+      console.error('Error authenticating:', error)
+      setAuthError('Connection error. Please try again.')
     } finally {
       setAuthLoading(false)
     }
@@ -358,48 +361,64 @@ function BookCompanion() {
             </div>
           </div>
 
-          <h2 className="text-2xl font-semibold text-center mb-2">Welcome to Book Companion</h2>
+          <h2 className="text-2xl font-semibold text-center mb-2">
+            {authMode === 'signin' ? 'Welcome Back' : 'Create Account'}
+          </h2>
           <p className="text-ios-gray text-center mb-6 text-sm">
-            {authStep === 'email'
-              ? 'Sign in to start conversations with book authors'
-              : 'Check your email for a magic link to sign in'}
+            {authMode === 'signin'
+              ? 'Sign in to continue your conversations'
+              : 'Sign up to start chatting with book authors'}
           </p>
 
-          {authStep === 'email' ? (
-            <>
+          <form onSubmit={handleAuth} className="space-y-4">
+            <div>
               <input
-                type="email"
-                placeholder="Enter your email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && sendMagicLink()}
-                className="w-full px-4 py-3 bg-ios-bg rounded-xl text-base mb-4"
+                type="text"
+                placeholder="Username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                className="w-full px-4 py-3 bg-ios-bg rounded-xl text-base"
                 autoFocus
+                autoCapitalize="none"
               />
-              <button
-                onClick={sendMagicLink}
-                disabled={authLoading || !email.includes('@')}
-                className="w-full bg-ios-blue text-white py-3 rounded-xl font-medium text-base ios-button disabled:opacity-50"
-              >
-                {authLoading ? 'Sending...' : 'Send Magic Link'}
-              </button>
-            </>
-          ) : (
-            <div className="flex flex-col items-center">
-              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
-                <Check className="w-8 h-8 text-green-600" />
-              </div>
-              <p className="text-center text-ios-gray mb-4">
-                We sent a magic link to <strong>{email}</strong>
-              </p>
-              <button
-                onClick={() => setAuthStep('email')}
-                className="text-ios-blue font-medium"
-              >
-                Use a different email
-              </button>
             </div>
-          )}
+
+            <div>
+              <input
+                type="password"
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full px-4 py-3 bg-ios-bg rounded-xl text-base"
+              />
+            </div>
+
+            {authError && (
+              <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3">
+                <p className="text-sm text-red-600">{authError}</p>
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={authLoading || !username.trim() || !password.trim()}
+              className="w-full bg-ios-blue text-white py-3 rounded-xl font-medium text-base ios-button disabled:opacity-50"
+            >
+              {authLoading ? (authMode === 'signin' ? 'Signing in...' : 'Creating account...') : (authMode === 'signin' ? 'Sign In' : 'Sign Up')}
+            </button>
+          </form>
+
+          <div className="mt-6 text-center">
+            <button
+              onClick={() => {
+                setAuthMode(authMode === 'signin' ? 'signup' : 'signin')
+                setAuthError('')
+              }}
+              className="text-ios-blue font-medium text-sm"
+            >
+              {authMode === 'signin' ? "Don't have an account? Sign up" : 'Already have an account? Sign in'}
+            </button>
+          </div>
         </div>
       </div>
     )
