@@ -9,11 +9,12 @@ Book Companion is an AI-powered web application that enables readers to have imm
 To transform passive reading into active dialogue, helping readers go deeper with books through natural, contextual conversations that feel like talking directly with the author.
 
 ### 1.3 Core Value Proposition
-- **Authentic Author Voice**: AI embodies the author's communication style, tone, and expertise
+- **Authentic Author Voice**: AI deeply embodies the author's distinctive writing style, tone, speech patterns, and personality—avoiding generic AI responses
+- **Intelligent Spelling Correction**: Automatically detects and corrects book/author name typos using web search
 - **Adaptive Learning**: Author persona adapts to reader needs (exploration, learning, application, questioning)
 - **Seamless Experience**: Mobile-first, iMessage-inspired interface that feels native and intuitive
 - **Persistent Conversations**: Cloud-synced conversations accessible across all devices
-- **Zero-Friction Access**: Passwordless authentication via magic links
+- **Simple Authentication**: Quick username/password authentication
 
 ---
 
@@ -77,26 +78,28 @@ To transform passive reading into active dialogue, helping readers go deeper wit
 
 ### 4.1 Authentication & User Management
 
-**Magic Link Authentication**
-- **Description**: Passwordless login via email magic links
-- **User Flow**: 
-  1. User enters email address
-  2. System sends magic link via Resend email service
-  3. User clicks link, automatically logged in
+**Username/Password Authentication**
+- **Description**: Traditional authentication with username and password
+- **User Flow**:
+  1. User chooses "Sign Up" or "Sign In"
+  2. Enters username and password
+  3. System validates credentials
   4. JWT token stored in localStorage for session persistence
 - **Requirements**:
-  - Email validation
-  - Token expiration (15 minutes)
-  - One-time use tokens
-  - Secure token generation
-  - Automatic user creation on first login
+  - Username validation (minimum 3 characters, unique, case-insensitive)
+  - Password validation (minimum 6 characters)
+  - Secure password hashing (bcrypt, 10 salt rounds)
+  - Automatic user creation on sign up
+  - Clear error messages for invalid credentials
 - **Security**:
-  - JWT tokens with expiration
+  - Password hashing with bcrypt
+  - JWT tokens with 30-day expiration
   - HTTPS-only in production
   - Token verification on protected routes
+  - Case-insensitive username matching
 
 **User Profile**
-- Email-based identification
+- Username-based identification
 - Automatic profile creation
 - Conversation history tied to user account
 
@@ -109,39 +112,66 @@ To transform passive reading into active dialogue, helping readers go deeper wit
 
 **Intelligent Author Research**
 - **Process**:
-  1. User submits book title and author
-  2. System uses Gemini 3 Flash with Google Search tool
-  3. Researches:
-     - Main arguments and frameworks
-     - Author's background and communication style
-     - 3-4 significant quotes or principles
-     - Current impact and reception
-  4. Generates 3 thought-provoking question starters
-- **Output Format**: JSON with `knowledge` (text) and `questionStarters` (array)
+  1. User submits book title and author (typos automatically corrected)
+  2. System uses Gemini 2.5 Pro with Google Search tool
+  3. Identifies correct canonical book title and author name
+  4. Researches:
+     - Main arguments, frameworks, and key ideas
+     - Author's background, expertise, and philosophy
+     - **Author's Distinctive Voice** (critical for authenticity):
+       * Characteristic sentence patterns and rhythms
+       * Use of metaphors, analogies, stories, and examples
+       * Level of formality (academic, conversational, provocative, etc.)
+       * Tone (warm, direct, challenging, humorous, serious, etc.)
+       * Typical conversational patterns and speech habits
+       * How they handle disagreement or criticism
+       * Signature phrases or rhetorical devices
+     - 3-4 direct quotes or passages that exemplify their writing style
+     - The book's impact and reception
+  5. Generates 3 thought-provoking question starters
+- **Output Format**: JSON with `correctTitle`, `correctAuthor`, `knowledge` (text), and `questionStarters` (array)
+- **Spelling Correction**: Frontend automatically uses corrected names for conversation
 - **Streaming**: Real-time status updates during research
 - **Error Handling**: Graceful fallback if research fails
 
 **Author Greeting Generation**
 - Personalized greeting from author persona
-- Warm, authentic tone matching author's voice
+- Authentic tone matching author's distinctive voice (not generic AI language)
 - 2-3 sentences, invites engagement
+- Explicitly avoids generic AI pleasantries unless that's the author's style
 
 ### 4.3 Author Persona & Conversation
 
 **Author Embodiment**
+- **Voice Authenticity Focus**: System deeply emphasizes matching the author's actual writing style, NOT typical AI assistant patterns
 - **System Instruction**: Comprehensive prompt that includes:
-  - Voice & personality matching
-  - Adaptive teaching approach
+  - **Critical Voice Matching**:
+    * Characteristic sentence structure and rhythm
+    * Natural speech patterns and vocabulary
+    * Level of formality, directness, and nuance
+    * Humor style (or lack thereof)
+    * Opinion expression with author's certainty level
+    * Stories and examples in author's style
+  - **AI Pattern Avoidance**:
+    * Explicitly forbids "Great question!" and generic openings
+    * Avoids overly balanced/diplomatic responses when author has strong opinions
+    * No corporate speak or motivational clichés
+    * No academic hedging unless that's the author's style
+    * No artificial structure patterns
+  - **Authentic Response Behavior**:
+    * Matches author's typical response length and depth
+    * Uses author's natural metaphors and analogies
+    * Expresses opinions with author's level of provocation
+    * Handles disagreement the way the author would
   - Book expertise (chapters, examples, frameworks)
-  - Personal touch (context, journey, influences)
-  - Character consistency (never breaks illusion)
-  - Markdown formatting for responses
-- **Adaptive Behavior**:
-  - **Exploration Mode**: Asks thoughtful questions, draws connections
-  - **Learning Mode**: Explains clearly with book examples
-  - **Application Mode**: Provides practical, implementation-focused guidance
-  - **Questioning Mode**: Engages intellectually, defends positions, acknowledges limitations
-- **Knowledge Base**: Uses researched author knowledge as context
+  - Character consistency (never breaks illusion, never mentions being AI)
+  - Markdown formatting for responses in author's style
+- **Adaptive Behavior** (responds naturally, not artificially categorized):
+  - Exploration: Asks thoughtful questions, draws connections
+  - Learning: Explains clearly with book examples
+  - Application: Provides practical, implementation-focused guidance
+  - Questioning: Engages intellectually, defends positions, acknowledges limitations
+- **Knowledge Base**: Uses researched author knowledge including detailed voice characteristics
 
 **Conversation Features**
 - **Streaming Responses**: Real-time token streaming for natural feel
@@ -222,10 +252,9 @@ To transform passive reading into active dialogue, helping readers go deeper wit
 ### 4.6 Data Management
 
 **Database Schema**
-- **Users**: id, email, clerk_user_id, created_at
+- **Users**: id, username (unique, case-insensitive), password_hash, created_at
 - **Conversations**: id, user_id, book_title, book_author, author_knowledge, created_at, updated_at
 - **Messages**: id, conversation_id, role, content, created_at
-- **Magic Link Tokens**: id, email, token, expires_at, used, created_at
 
 **Data Operations**
 - Create conversation
@@ -247,33 +276,30 @@ To transform passive reading into active dialogue, helping readers go deeper wit
 
 ### 5.1 First-Time User Flow
 
-1. **Landing/Login**
+1. **Landing/Sign Up**
    - User arrives at app
-   - Sees sign-in modal (required before use)
-   - Enters email address
-   - Clicks "Send Magic Link"
+   - Sees authentication modal (required before use)
+   - Chooses "Sign Up"
+   - Enters username and password
+   - Clicks "Sign Up"
+   - Account created, JWT token stored in localStorage
 
-2. **Email Verification**
-   - Receives email with magic link
-   - Clicks link
-   - Redirected to app, automatically logged in
-   - Token stored in localStorage
-
-3. **Book Setup**
+2. **Book Setup**
    - Sees empty conversation list or setup screen
    - Enters book title and author
    - Clicks "Start Conversation"
    - Watches research progress (streaming status updates)
+   - System auto-corrects any typos in book/author names
    - Sees author greeting
 
-4. **First Conversation**
+3. **First Conversation**
    - Sees question starters
    - Selects one or types own question
-   - Receives streaming response
+   - Receives streaming response in author's authentic voice
    - Continues conversation
    - Messages auto-saved
 
-5. **Returning to App**
+4. **Returning to App**
    - Logs in (if needed)
    - Sees conversation list
    - Taps conversation to continue
@@ -281,10 +307,12 @@ To transform passive reading into active dialogue, helping readers go deeper wit
 
 ### 5.2 Returning User Flow
 
-1. **Login**
+1. **Sign In**
    - Opens app
    - If token valid, auto-logged in
    - If token expired, sees sign-in modal
+   - Enters username and password
+   - Clicks "Sign In"
 
 2. **Conversation List**
    - Sees all previous conversations
@@ -329,9 +357,8 @@ To transform passive reading into active dialogue, helping readers go deeper wit
 - **Framework**: Express.js
 - **Database**: PostgreSQL
 - **ORM/Query**: pg (node-postgres)
-- **Authentication**: JWT (jsonwebtoken)
-- **Email**: Resend API
-- **AI**: Google Generative AI (Gemini 3 Flash)
+- **Authentication**: JWT (jsonwebtoken) + bcrypt (password hashing)
+- **AI**: Google Generative AI (Gemini 2.5 Pro with Google Search)
 
 **Infrastructure**
 - **Hosting**: Railway
@@ -365,9 +392,9 @@ To transform passive reading into active dialogue, helping readers go deeper wit
 ### 6.3 API Endpoints
 
 **Authentication**
-- `POST /api/auth/send-magic-link` - Send magic link email
-- `GET /api/auth/verify/:token` - Verify token and login
-- `POST /api/auth/logout` - Logout (client-side)
+- `POST /api/auth/signup` - Create new user account
+- `POST /api/auth/signin` - Authenticate user and return JWT
+- `POST /api/auth/logout` - Logout (client-side token removal)
 
 **Conversations**
 - `GET /api/conversations` - List all user conversations
@@ -597,17 +624,37 @@ To transform passive reading into active dialogue, helping readers go deeper wit
 - Conversation recommendations
 
 **Advanced AI Features**
-- Multi-book conversations
-- Cross-book connections
+- **Multi-Author Conversations** ⭐ (High Priority)
+  - Have conversations with 2-4 authors simultaneously
+  - Authors interact with each other and with you
+  - Multiple interaction modes:
+    * **Round Robin**: Each author responds in sequence to your questions
+    * **Free Discussion**: Authors respond naturally when they have something to add
+    * **Debate Mode**: Authors take opposing positions on controversial topics
+  - Visual differentiation (unique colors, avatars, name tags for each author)
+  - Smart routing (only relevant authors respond to save cost)
+  - Use cases:
+    * Synthesis: See how different frameworks complement each other
+    * Tension resolution: Explore contradictions between books
+    * Debate: Watch authors respectfully challenge each other's ideas
+    * Learning: Get multiple expert perspectives on complex questions
+  - Example combinations:
+    * Productivity Panel: Cal Newport + James Clear + Tim Ferriss
+    * Mental Models Masters: Shane Parrish + Charlie Munger + Annie Duke
+    * Business Strategy: Clayton Christensen + Peter Thiel + Ben Horowitz
+- Cross-book connections and synthesis
 - Citation tracking
 - Fact-checking integration
-- Voice input/output
+- Voice input/output (text-to-speech and speech-to-text)
+- Voice cloning (hear the actual author's voice)
+- Photo upload (discuss book highlights, diagrams, notes)
 
 **Analytics & Insights**
 - Reading insights dashboard
 - Conversation analytics
 - Book completion tracking
 - Learning progress
+- Implementation tracking (goals based on book principles)
 
 ### 10.3 Phase 4 Features (Long-term)
 
@@ -636,10 +683,10 @@ To transform passive reading into active dialogue, helping readers go deeper wit
 ### 11.1 Technical Constraints
 
 - **API Limits**: Google Gemini API rate limits
-- **Email Limits**: Resend free tier (100 emails/day)
 - **Database**: Railway PostgreSQL limits
 - **Storage**: Message content size limits
 - **Browser Support**: Modern browsers only
+- **Password Security**: bcrypt hashing adds slight authentication delay
 
 ### 11.2 Business Constraints
 
@@ -649,11 +696,12 @@ To transform passive reading into active dialogue, helping readers go deeper wit
 
 ### 11.3 Assumptions
 
-- Users have email access
+- Users can create/remember usernames and passwords
 - Users are comfortable with AI
 - Users want persistent conversations
 - Mobile-first usage pattern
 - English language primary (for now)
+- Users may misspell book/author names (system handles this)
 
 ---
 
@@ -670,8 +718,8 @@ To transform passive reading into active dialogue, helping readers go deeper wit
   - *Mitigation*: Timeout handling, reconnection logic, error messages
 
 **Medium Priority**
-- **Email Delivery**: Resend service issues
-  - *Mitigation*: Alternative email provider, clear error messages
+- **Password Security**: Weak passwords, credential stuffing
+  - *Mitigation*: Password requirements, rate limiting, bcrypt hashing
 - **Scalability**: Performance under load
   - *Mitigation*: Load testing, optimization, caching
 
@@ -693,9 +741,9 @@ To transform passive reading into active dialogue, helping readers go deeper wit
 
 ### 13.1 Must-Have Features (MVP)
 
-- ✅ Magic link authentication
-- ✅ Book setup and author research
-- ✅ Author persona conversation
+- ✅ Username/password authentication
+- ✅ Book setup and author research with spelling correction
+- ✅ Authentic author persona conversation (voice matching)
 - ✅ Message streaming
 - ✅ Conversation persistence
 - ✅ Conversation list view
@@ -746,7 +794,21 @@ To transform passive reading into active dialogue, helping readers go deeper wit
 
 ### 14.3 Change Log
 
-**Version 1.0** (Current)
+**Version 1.2** (Current - 2024-12-24)
+- Enhanced author voice authenticity with detailed style matching
+- Automatic spelling correction for book/author names
+- Username/password authentication (replaced magic links)
+- Added multi-author conversations to future roadmap
+- Upgraded to Gemini 2.5 Pro
+- Comprehensive AI pattern avoidance system
+
+**Version 1.1** (2024-12-24)
+- Switched from magic link to username/password authentication
+- Replaced Resend with bcrypt for password hashing
+- Updated database schema (username instead of email)
+- Re-enabled authentication middleware
+
+**Version 1.0** (2024-01-21)
 - Initial release
 - Core conversation features
 - Magic link authentication
@@ -755,8 +817,8 @@ To transform passive reading into active dialogue, helping readers go deeper wit
 
 ---
 
-**Document Version**: 1.0  
-**Last Updated**: 2025-01-21  
-**Owner**: Product Team  
+**Document Version**: 1.2
+**Last Updated**: 2024-12-24
+**Owner**: Product Team
 **Status**: Active
 
