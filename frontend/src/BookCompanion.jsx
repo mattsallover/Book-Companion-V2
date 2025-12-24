@@ -47,6 +47,19 @@ const stripMarkdown = (text) => {
     .trim()
 }
 
+// Typing indicator component
+const TypingIndicator = () => (
+  <div className="flex mb-3 justify-start message-bubble">
+    <div className="bg-ios-bubble-gray rounded-2xl px-4 py-3 flex items-center space-x-1">
+      <div className="flex space-x-1">
+        <div className="w-2 h-2 bg-ios-gray rounded-full animate-bounce" style={{ animationDelay: '0ms', animationDuration: '1s' }}></div>
+        <div className="w-2 h-2 bg-ios-gray rounded-full animate-bounce" style={{ animationDelay: '150ms', animationDuration: '1s' }}></div>
+        <div className="w-2 h-2 bg-ios-gray rounded-full animate-bounce" style={{ animationDelay: '300ms', animationDuration: '1s' }}></div>
+      </div>
+    </div>
+  </div>
+)
+
 function BookCompanion() {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [showAuthModal, setShowAuthModal] = useState(true)
@@ -574,6 +587,9 @@ function BookCompanion() {
             </div>
           </div>
         ))}
+
+        {/* Typing Indicator */}
+        {isLoading && <TypingIndicator />}
 
         {/* Question Starters */}
         {questionStarters.length > 0 && messages.length === 1 && (
