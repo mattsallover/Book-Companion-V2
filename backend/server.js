@@ -407,7 +407,14 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok' })
 })
 
+// Test route
+app.get('/', (req, res) => {
+  res.send('App is working! Frontend serving temporarily disabled for testing.')
+})
+
 // Serve static frontend files in production
+// TEMPORARILY DISABLED FOR DEBUGGING
+/*
 if (process.env.NODE_ENV === 'production') {
   const frontendPath = path.join(__dirname, '../frontend/dist')
   console.log('Frontend path:', frontendPath)
@@ -433,6 +440,7 @@ if (process.env.NODE_ENV === 'production') {
     res.send('Development mode - frontend not served')
   })
 }
+*/
 
 // Global error handler
 app.use((err, req, res, next) => {
