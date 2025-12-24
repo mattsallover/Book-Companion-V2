@@ -407,40 +407,24 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok' })
 })
 
-// Test route
-app.get('/', (req, res) => {
-  res.send('App is working! Frontend serving temporarily disabled for testing.')
-})
-
 // Serve static frontend files in production
-// TEMPORARILY DISABLED FOR DEBUGGING
-/*
 if (process.env.NODE_ENV === 'production') {
   const frontendPath = path.join(__dirname, '../frontend/dist')
   console.log('Frontend path:', frontendPath)
 
   // Serve static files
-  app.use(express.static(frontendPath, {
-    index: false,
-    fallthrough: true
-  }))
+  app.use(express.static(frontendPath))
 
   // Catch-all route for SPA
   app.get('*', (req, res) => {
-    console.log('Catch-all route hit:', req.url)
     res.sendFile(path.join(frontendPath, 'index.html'), (err) => {
       if (err) {
-        console.error('Error:', err.message)
+        console.error('Error serving index.html:', err.message)
         res.status(500).send(`Error: ${err.message}`)
       }
     })
   })
-} else {
-  app.get('*', (req, res) => {
-    res.send('Development mode - frontend not served')
-  })
 }
-*/
 
 // Global error handler
 app.use((err, req, res, next) => {
