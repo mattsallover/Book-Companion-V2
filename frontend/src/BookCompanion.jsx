@@ -61,8 +61,8 @@ const TypingIndicator = () => (
 )
 
 function BookCompanion() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false)
-  const [showAuthModal, setShowAuthModal] = useState(true)
+  const [isAuthenticated, setIsAuthenticated] = useState(true) // TESTING: Skip auth
+  const [showAuthModal, setShowAuthModal] = useState(false) // TESTING: Hide auth modal
   const [authStep, setAuthStep] = useState('email') // 'email' | 'sent'
   const [email, setEmail] = useState('')
   const [authLoading, setAuthLoading] = useState(false)
