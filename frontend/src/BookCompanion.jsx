@@ -561,32 +561,49 @@ function BookCompanion() {
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto ios-scroll bg-ios-bg px-4 py-4">
-        {messages.map((message, index) => (
-          <div
-            key={index}
-            className={`flex mb-3 message-bubble ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
-          >
-            <div
-              className={`max-w-[75%] rounded-2xl px-4 py-2 ${
-                message.role === 'user'
-                  ? 'bg-ios-blue text-white'
-                  : 'bg-ios-bubble-gray text-black'
-              }`}
-            >
-              {message.role === 'assistant' ? (
-                <div className="prose prose-sm max-w-none">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                    {message.content}
-                  </ReactMarkdown>
+        {messages.map((message, index) => {
+          // Check if we should show timestamp (when sender changes or first message)
+          const showTimestamp = index === 0 || messages[index - 1]?.role !== message.role
+          const timestamp = message.created_at ? formatTime(message.created_at) : 'Just now'
+
+          return (
+            <div key={index}>
+              {/* Timestamp */}
+              {showTimestamp && (
+                <div className="flex justify-center mb-2">
+                  <span className="text-xs text-ios-gray px-3 py-1 rounded-full bg-white/50">
+                    {timestamp}
+                  </span>
                 </div>
-              ) : (
-                <p className="text-[15px] leading-[20px] whitespace-pre-wrap break-words">
-                  {message.content}
-                </p>
               )}
+
+              {/* Message Bubble */}
+              <div
+                className={`flex ${index > 0 && messages[index - 1]?.role === message.role ? 'mb-1' : 'mb-3'} message-bubble ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+              >
+                <div
+                  className={`max-w-[75%] rounded-2xl px-4 py-2 ${
+                    message.role === 'user'
+                      ? 'bg-ios-blue text-white'
+                      : 'bg-ios-bubble-gray text-black'
+                  }`}
+                >
+                  {message.role === 'assistant' ? (
+                    <div className="prose prose-sm max-w-none">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {message.content}
+                      </ReactMarkdown>
+                    </div>
+                  ) : (
+                    <p className="text-[15px] leading-[20px] whitespace-pre-wrap break-words">
+                      {message.content}
+                    </p>
+                  )}
+                </div>
+              </div>
             </div>
-          </div>
-        ))}
+          )
+        })}
 
         {/* Typing Indicator */}
         {isLoading && <TypingIndicator />}
