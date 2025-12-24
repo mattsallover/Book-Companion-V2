@@ -254,7 +254,7 @@ app.post('/api/load-author', authenticateToken, async (req, res) => {
 
   try {
     const model = genAI.getGenerativeModel({
-      model: 'gemini-2.0-flash-exp',
+      model: 'gemini-1.5-flash',
       tools: [{ googleSearch: {} }]
     })
 
@@ -298,7 +298,7 @@ app.post('/api/greeting', authenticateToken, async (req, res) => {
   const { conversationId, bookTitle, bookAuthor, authorKnowledge } = req.body
 
   try {
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' })
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' })
 
     const prompt = `You are ${bookAuthor}, author of "${bookTitle}".
 
@@ -336,7 +336,7 @@ app.post('/api/chat', authenticateToken, async (req, res) => {
   res.setHeader('Transfer-Encoding', 'chunked')
 
   try {
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' })
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' })
 
     const systemInstruction = `You are ${bookAuthor}, the author of "${bookTitle}". Embody my voice, personality, and expertise throughout our conversation.
 
