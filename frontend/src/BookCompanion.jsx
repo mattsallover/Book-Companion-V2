@@ -196,7 +196,11 @@ function BookCompanion() {
                   setAuthorKnowledge(parsed.knowledge)
                   setQuestionStarters(parsed.questionStarters)
 
-                  // Create conversation
+                  // Use corrected book/author names if provided
+                  const finalBookTitle = parsed.correctTitle || bookTitle
+                  const finalBookAuthor = parsed.correctAuthor || bookAuthor
+
+                  // Create conversation with corrected names
                   const convResponse = await fetch(`${API_URL}/api/conversations`, {
                     method: 'POST',
                     headers: {
@@ -204,8 +208,8 @@ function BookCompanion() {
                       'Authorization': `Bearer ${getToken()}`
                     },
                     body: JSON.stringify({
-                      bookTitle,
-                      bookAuthor,
+                      bookTitle: finalBookTitle,
+                      bookAuthor: finalBookAuthor,
                       authorKnowledge: parsed.knowledge
                     })
                   })
@@ -213,7 +217,7 @@ function BookCompanion() {
                   if (convResponse.ok) {
                     const conversation = await convResponse.json()
 
-                    // Generate greeting
+                    // Generate greeting with corrected names
                     const greetingResponse = await fetch(`${API_URL}/api/greeting`, {
                       method: 'POST',
                       headers: {
@@ -222,8 +226,8 @@ function BookCompanion() {
                       },
                       body: JSON.stringify({
                         conversationId: conversation.id,
-                        bookTitle,
-                        bookAuthor,
+                        bookTitle: finalBookTitle,
+                        bookAuthor: finalBookAuthor,
                         authorKnowledge: parsed.knowledge
                       })
                     })

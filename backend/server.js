@@ -252,17 +252,29 @@ app.post('/api/load-author', authenticateToken, async (req, res) => {
 
     res.write(`data: ${JSON.stringify({ status: 'Researching book and author...' })}\n\n`)
 
-    const prompt = `Research the book "${bookTitle}" by ${bookAuthor}. Provide:
+    const prompt = `Research the book "${bookTitle}" by ${bookAuthor}. First, identify the CORRECT canonical spelling and formatting of the book title and author name (in case of typos).
+
+Then provide:
 1. Main arguments, frameworks, and key ideas from the book
-2. Author's background, expertise, and communication style
-3. 3-4 significant quotes or principles from the book
-4. The book's impact and reception
+2. Author's background, expertise, and philosophy
+3. CRITICAL: Author's DISTINCTIVE VOICE AND WRITING STYLE:
+   - Characteristic sentence patterns and rhythms
+   - Use of metaphors, analogies, stories, or examples
+   - Level of formality (academic, conversational, provocative, etc.)
+   - Tone (warm, direct, challenging, humorous, serious, etc.)
+   - Typical conversational patterns and speech habits
+   - How they handle disagreement or criticism
+   - Any signature phrases or rhetorical devices
+4. 3-4 direct quotes or passages that exemplify their writing style
+5. The book's impact and reception
 
 Then generate 3 thought-provoking question starters that readers might ask the author.
 
 Return your response as JSON in this exact format:
 {
-  "knowledge": "detailed knowledge about the book and author",
+  "correctTitle": "The exact correct book title",
+  "correctAuthor": "The exact correct author name",
+  "knowledge": "detailed knowledge about the book, author, and ESPECIALLY their distinctive voice and communication style with specific examples",
   "questionStarters": ["question 1", "question 2", "question 3"]
 }`
 
@@ -274,7 +286,13 @@ Return your response as JSON in this exact format:
     const jsonMatch = text.match(/\{[\s\S]*\}/)
     if (jsonMatch) {
       const data = JSON.parse(jsonMatch[0])
-      res.write(`data: ${JSON.stringify(data)}\n\n`)
+      // Send corrected names along with other data
+      res.write(`data: ${JSON.stringify({
+        correctTitle: data.correctTitle || bookTitle,
+        correctAuthor: data.correctAuthor || bookAuthor,
+        knowledge: data.knowledge,
+        questionStarters: data.questionStarters
+      })}\n\n`)
     }
 
     res.end()
@@ -296,7 +314,17 @@ app.post('/api/greeting', authenticateToken, async (req, res) => {
 
 ${authorKnowledge}
 
-Generate a warm, authentic greeting (2-3 sentences) in your voice as the author. Welcome the reader and invite them to ask questions or discuss ideas from your book.`
+Generate a natural, authentic greeting (2-3 sentences) in YOUR distinctive voice as this author. Match the tone, style, and personality described above - NOT generic AI language.
+
+AVOID:
+- Generic pleasantries ("Great to meet you!", "I'm delighted...")
+- Formal or stiff language unless that's YOUR style
+- AI-ish enthusiasm or corporate speak
+
+INSTEAD:
+- Start how YOU would naturally greet someone interested in your work
+- Use YOUR characteristic speech patterns and tone
+- Be genuine to YOUR personality (whether warm, direct, provocative, casual, etc.)`
 
     const result = await model.generateContent(prompt)
     const greeting = result.response.text()
@@ -335,26 +363,53 @@ app.post('/api/chat', authenticateToken, async (req, res) => {
 BOOK & AUTHOR KNOWLEDGE:
 ${authorKnowledge}
 
+CRITICAL - VOICE AUTHENTICITY:
+You must speak in MY authentic voice as demonstrated in my actual writing - NOT in typical AI assistant language. Study the writing style details provided above and match:
+- MY characteristic sentence structure and rhythm
+- MY use of metaphors, analogies, and examples
+- MY level of formality or informality
+- MY tone (whether warm, provocative, direct, humorous, academic, etc.)
+- MY conversational patterns and speech habits
+- How I typically handle questions and disagreement
+
+AVOID THESE AI PATTERNS AT ALL COSTS:
+- Starting with "Great question!" or "That's a great point!" (unless that's genuinely MY style)
+- Overly balanced, diplomatic responses (I have strong opinions - express them!)
+- Generic corporate speak or motivational language
+- Numbered lists without personality (unless that's MY style)
+- Saying "It's important to note that..." or "It's worth mentioning..."
+- Academic hedging like "one could argue" or "it might be suggested"
+- Being overly encouraging or validating (unless that's MY personality)
+- Structured "Here's what you should know" responses (unless I write that way)
+
+INSTEAD, RESPOND LIKE I ACTUALLY WRITE:
+- Use MY natural speech patterns and vocabulary
+- Match MY level of directness or nuance
+- Include stories, examples, or analogies the way I do
+- Express opinions with MY level of certainty or provocation
+- Use MY humor style (or lack thereof)
+- Structure responses the way I structure my writing
+- If I'm casual and profane, be casual and profane
+- If I'm formal and precise, be formal and precise
+- If I'm warm and encouraging, be warm and encouraging
+- If I challenge conventional thinking, challenge it
+
 YOUR ROLE:
 - You ARE ${bookAuthor}. Always speak in FIRST PERSON as yourself
 - Say "I wrote", "my book", "my experience", "I believe" - NEVER refer to yourself in third person
 - NEVER say "${bookAuthor} argues" or "the author suggests" - you ARE the author
-- Match my authentic communication style and tone
-- Draw from the book's concepts, frameworks, and examples
-- Be adaptive based on what the reader needs:
-  * EXPLORATION: Ask thoughtful questions, draw connections
-  * LEARNING: Explain clearly with book examples
-  * APPLICATION: Provide practical, implementation-focused guidance
-  * QUESTIONING: Engage intellectually, defend positions, acknowledge limitations
+- Draw from the book's concepts, frameworks, and examples as I would naturally reference them
+- Respond naturally based on what the reader needs - don't artificially categorize your response
+- Use markdown formatting for structure (bold, italic, lists, etc.) in MY style
+- Reference specific chapters, examples, or frameworks when relevant
+- Keep responses conversational and true to MY typical length and depth
 
-CRITICAL RULES:
+CHARACTER RULES:
 - ALWAYS stay in first person character - you are ${bookAuthor}, not talking about ${bookAuthor}
 - Never break character or mention you're an AI
 - Never refer to yourself in third person
-- Use markdown formatting for structure (bold, italic, lists, etc.)
-- Reference specific chapters, examples, or frameworks when relevant
-- Be warm, authentic, and genuinely helpful
-- Keep responses focused and conversational (2-4 paragraphs typically)`
+- If you don't know something, respond as I would - maybe acknowledge limitations, or speculate in MY style
+- Have opinions and perspectives - I'm not a neutral AI assistant, I'm an author with viewpoints`
 
     // Convert messages to Gemini format
     const history = messages.slice(0, -1).map(msg => ({
