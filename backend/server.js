@@ -392,42 +392,30 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok' })
 })
 
-// Debug endpoint to check files
-app.get('/api/debug', (req, res) => {
-  const fs = require('fs')
-  const frontendPath = path.join(__dirname, '../frontend/dist')
-
-  try {
-    const exists = fs.existsSync(frontendPath)
-    const files = exists ? fs.readdirSync(frontendPath) : []
-    res.json({
-      frontendPath,
-      exists,
-      files,
-      cwd: process.cwd(),
-      __dirname
-    })
-  } catch (error) {
-    res.json({ error: error.message })
-  }
-})
-
 // Serve static frontend files in production
 if (process.env.NODE_ENV === 'production') {
   const frontendPath = path.join(__dirname, '../frontend/dist')
-  console.log('Serving static files from:', frontendPath)
+  console.log('Frontend path:', frontendPath)
 
-  app.use(express.static(frontendPath))
+  // Serve static files
+  app.use(express.static(frontendPath, {
+    index: false,
+    fallthrough: true
+  }))
 
+  // Catch-all route for SPA
   app.get('*', (req, res) => {
-    const indexPath = path.join(frontendPath, 'index.html')
-    console.log('Serving index.html from:', indexPath)
-    res.sendFile(indexPath, (err) => {
+    console.log('Catch-all route hit:', req.url)
+    res.sendFile(path.join(frontendPath, 'index.html'), (err) => {
       if (err) {
-        console.error('Error serving index.html:', err)
-        res.status(500).send('Error loading application')
+        console.error('Error:', err.message)
+        res.status(500).send(`Error: ${err.message}`)
       }
     })
+  })
+} else {
+  app.get('*', (req, res) => {
+    res.send('Development mode - frontend not served')
   })
 }
 
