@@ -24,8 +24,17 @@ const pool = new pg.Pool({
 })
 
 // Initialize services
-const resend = new Resend(process.env.RESEND_API_KEY)
-const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY)
+let resend, genAI
+try {
+  if (process.env.RESEND_API_KEY) {
+    resend = new Resend(process.env.RESEND_API_KEY)
+  }
+  if (process.env.GOOGLE_API_KEY) {
+    genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY)
+  }
+} catch (error) {
+  console.error('Error initializing services:', error)
+}
 
 // Middleware
 app.use(cors())
@@ -425,9 +434,21 @@ if (process.env.NODE_ENV === 'production') {
   })
 }
 
+// Global error handler
+app.use((err, req, res, next) => {
+  console.error('Unhandled error:', err)
+  res.status(500).json({ error: 'Internal server error', message: err.message })
+})
+
 // Start server
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on port ${PORT}`)
+  console.log('Environment check:')
+  console.log('- NODE_ENV:', process.env.NODE_ENV)
+  console.log('- DATABASE_URL:', process.env.DATABASE_URL ? 'Set' : 'Missing')
+  console.log('- JWT_SECRET:', process.env.JWT_SECRET ? 'Set' : 'Missing')
+  console.log('- RESEND_API_KEY:', process.env.RESEND_API_KEY ? 'Set' : 'Missing')
+  console.log('- GOOGLE_API_KEY:', process.env.GOOGLE_API_KEY ? 'Set' : 'Missing')
 })
 
 // Graceful shutdown
