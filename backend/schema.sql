@@ -1,46 +1,44 @@
--- Database schema for Book Companion
 -- Users table
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS users (
   id SERIAL PRIMARY KEY,
-  clerk_user_id VARCHAR(255) UNIQUE NOT NULL,
-  email VARCHAR(255),
+  email VARCHAR(255) UNIQUE NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Conversations table
-CREATE TABLE conversations (
+CREATE TABLE IF NOT EXISTS conversations (
   id SERIAL PRIMARY KEY,
   user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-  book_title VARCHAR(500) NOT NULL,
-  book_author VARCHAR(500) NOT NULL,
+  book_title TEXT NOT NULL,
+  book_author TEXT NOT NULL,
   author_knowledge TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Messages table
-CREATE TABLE messages (
+CREATE TABLE IF NOT EXISTS messages (
   id SERIAL PRIMARY KEY,
   conversation_id INTEGER REFERENCES conversations(id) ON DELETE CASCADE,
-  role VARCHAR(20) NOT NULL CHECK (role IN ('user', 'assistant')),
+  role VARCHAR(50) NOT NULL,
   content TEXT NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Magic Link Tokens table
-CREATE TABLE magic_link_tokens (
+-- Magic link tokens table
+CREATE TABLE IF NOT EXISTS magic_link_tokens (
   id SERIAL PRIMARY KEY,
   email VARCHAR(255) NOT NULL,
   token VARCHAR(255) UNIQUE NOT NULL,
   expires_at TIMESTAMP NOT NULL,
-  used BOOLEAN DEFAULT FALSE,
+  used BOOLEAN DEFAULT false,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Indexes for performance
-CREATE INDEX idx_conversations_user_id ON conversations(user_id);
-CREATE INDEX idx_messages_conversation_id ON messages(conversation_id);
-CREATE INDEX idx_users_clerk_id ON users(clerk_user_id);
-CREATE INDEX idx_users_email ON users(email);
-CREATE INDEX idx_magic_link_tokens_token ON magic_link_tokens(token);
-CREATE INDEX idx_magic_link_tokens_email ON magic_link_tokens(email);
+CREATE INDEX IF NOT EXISTS idx_conversations_user_id ON conversations(user_id);
+CREATE INDEX IF NOT EXISTS idx_conversations_updated_at ON conversations(updated_at DESC);
+CREATE INDEX IF NOT EXISTS idx_messages_conversation_id ON messages(conversation_id);
+CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages(created_at);
+CREATE INDEX IF NOT EXISTS idx_magic_tokens_token ON magic_link_tokens(token);
+CREATE INDEX IF NOT EXISTS idx_magic_tokens_email ON magic_link_tokens(email);

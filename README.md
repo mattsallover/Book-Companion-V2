@@ -1,207 +1,253 @@
-# Book Companion 📚✨
+# Book Companion
 
-AI-powered conversations with book authors using passwordless authentication and cross-device sync.
-
-[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/template/book-companion)
+An AI-powered web application that enables readers to have immersive, personalized conversations with book authors. Built with React, Express, PostgreSQL, and Google's Gemini AI, featuring a beautiful iMessage-style interface.
 
 ## Features
 
-- 🎭 **Author Embodiment** – Have natural conversations with AI simulating the book's author
-- 🔐 **Magic Link Auth** – Passwordless login via email
-- 💾 **Cloud Persistence** – Save and sync conversations across all your devices
-- 📱 **Mobile-First** – Optimized for iPhone, iPad, and desktop
-- 🔍 **Intelligent Research** – Automatically gathers comprehensive book and author information
-- 💬 **Adaptive Conversations** – Author adapts to your needs (explore, learn, apply, question)
-- 📥 **Import/Export** – Save chats as Markdown, JSON, or plain text
-
-## Quick Start
-
-### Prerequisites
-
-- Node.js 18+ ([download](https://nodejs.org/))
-- PostgreSQL ([download](https://www.postgresql.org/download/))
-- [Resend](https://resend.com) account (free tier - 100 emails/day)
-- [Google AI API key](https://aistudio.google.com/app/apikey) (free tier available)
-
-### Local Setup
-
-```bash
-# 1. Clone the repository
-git clone https://github.com/mattsallover/Book-Companion.git
-cd "Book Companion"
-
-# 2. Install dependencies
-npm install
-cd backend && npm install
-cd ../frontend && npm install
-cd ..
-
-# 3. Set up PostgreSQL database
-createdb book_companion
-psql -d book_companion -f backend/init-db.sql
-
-# 4. Configure environment variables
-cp .env.example .env
-# Edit .env and add your API keys (see below)
-
-# 5. Start the application
-npm run dev
-```
-
-The app will be available at `http://localhost:5173`
-
-### Environment Variables
-
-Edit `.env` in the project root:
-
-```env
-# Google Gemini API (required)
-GOOGLE_API_KEY=your_google_api_key_here
-
-# PostgreSQL (required)
-DATABASE_URL=postgresql://localhost/book_companion
-
-# JWT Secret (required - generate a secure random string)
-JWT_SECRET=your-secret-key-here
-
-# Resend Email Service (required for authentication)
-EMAIL_API_KEY=re_your_resend_api_key
-EMAIL_FROM=noreply@yourdomain.com
-
-# Application URL (for magic link generation)
-APP_URL=http://localhost:5173
-
-# Server Configuration
-PORT=3001
-NODE_ENV=development
-```
-
-**Generate JWT Secret:**
-```bash
-openssl rand -base64 32
-```
-
----
-
-## 🚀 Deploy to Railway (Recommended)
-
-Railway offers seamless deployment with PostgreSQL database included.
-
-### Method 1: Deploy from GitHub (Recommended)
-
-1. **Push to GitHub** (if not already done):
-   ```bash
-   git add .
-   git commit -m "Initial commit"
-   git push origin main
-   ```
-
-2. **Create Railway Project**:
-   - Go to [railway.app](https://railway.app)
-   - Click "New Project" → "Deploy from GitHub repo"
-   - Select your `Book-Companion` repository
-
-3. **Add PostgreSQL**:
-   - Click "New" → "Database" → "Add PostgreSQL"
-   - Railway will automatically set `DATABASE_URL`
-
-4. **Set Environment Variables**:
-   In Railway dashboard → Variables tab:
-   ```
-   GOOGLE_API_KEY=your_key
-   JWT_SECRET=<generate with: openssl rand -base64 32>
-   EMAIL_API_KEY=re_your_resend_key
-   EMAIL_FROM=noreply@yourdomain.com
-   APP_URL=https://your-app.up.railway.app
-   NODE_ENV=production
-   ```
-
-5. **Initialize Database**:
-   - Go to PostgreSQL service → Connect
-   - Copy the connection command
-   - Run locally: `psql <connection-string> -f backend/init-db.sql`
-
-6. **Deploy**:
-   - Railway auto-deploys on git push
-   - Get your URL from Settings → Domains
-
-### Method 2: Deploy with Railway CLI
-
-```bash
-npm install -g @railway/cli
-railway login
-railway init
-railway add postgresql
-railway up
-```
-
----
-
-## 🌐 Deploy Frontend to Vercel (Optional)
-
-For separate frontend deployment:
-
-```bash
-cd frontend
-npm install -g vercel
-vercel
-
-# Set environment variable
-vercel env add VITE_API_URL production
-# Enter: https://your-backend.up.railway.app
-
-# Deploy
-vercel --prod
-```
-
----
-
-## Usage
-
-1. **Sign In** – Click "Sign In" and enter your email
-2. **Check Email** – Click the magic link sent to your inbox
-3. **Add a Book** – Enter the title and author
-4. **Start Chatting** – The AI researches and embodies the author
-5. **Save** – Click "Save" to persist your conversation
-6. **Access Anywhere** – Log in from any device to see your conversations
-
----
+- **iMessage-Style Interface**: Beautiful, familiar messaging UI optimized for mobile
+- **Magic Link Authentication**: Passwordless sign-in via email
+- **AI Author Personas**: Converse with book authors powered by Gemini AI
+- **Intelligent Research**: Automatic author and book research using Google Search
+- **Persistent Conversations**: All conversations saved and synced across devices
+- **Streaming Responses**: Real-time AI responses with markdown support
+- **Mobile-First Design**: Responsive design that works beautifully on all devices
 
 ## Tech Stack
 
-- **Frontend**: React + Vite + TailwindCSS
-- **Backend**: Node.js + Express
-- **Database**: PostgreSQL
-- **Auth**: Magic Link (Resend) + JWT
-- **AI**: Google Gemini with web search
-- **Deployment**: Railway + Vercel
+**Frontend:**
+- React 18
+- Vite
+- Tailwind CSS
+- React Markdown
+- Lucide React (icons)
 
----
+**Backend:**
+- Node.js 18+
+- Express.js
+- PostgreSQL
+- JWT Authentication
+- Resend (email)
+- Google Generative AI (Gemini)
 
-## Contributing
+## Railway Deployment (Easiest Method)
 
-Contributions are welcome! Please:
+### Prerequisites
+1. A [Railway](https://railway.app) account
+2. A [Resend](https://resend.com) API key for sending emails
+3. A [Google AI Studio](https://makersuite.google.com/app/apikey) API key for Gemini
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+### Steps
 
----
+1. **Push to GitHub**
+   ```bash
+   git init
+   git add .
+   git commit -m "Initial commit"
+   git remote add origin YOUR_GITHUB_REPO_URL
+   git push -u origin main
+   ```
+
+2. **Create New Project on Railway**
+   - Go to [Railway](https://railway.app)
+   - Click "New Project"
+   - Select "Deploy from GitHub repo"
+   - Choose your repository
+
+3. **Add PostgreSQL Database**
+   - In your Railway project, click "New"
+   - Select "Database" → "PostgreSQL"
+   - Railway will automatically provision a database
+
+4. **Set Environment Variables**
+
+   In Railway, go to your app service → Variables, and add:
+
+   ```
+   DATABASE_URL=${{Postgres.DATABASE_URL}}
+   JWT_SECRET=your-random-secret-key-here
+   RESEND_API_KEY=re_your_resend_api_key
+   RESEND_FROM_EMAIL=your-verified@email.com
+   GOOGLE_API_KEY=your-google-api-key
+   NODE_ENV=production
+   APP_URL=${{RAILWAY_PUBLIC_DOMAIN}}
+   ```
+
+   Note: Railway will automatically provide `DATABASE_URL` when you add PostgreSQL.
+
+5. **Initialize Database**
+
+   Once deployed, run the schema:
+   - Go to your PostgreSQL service
+   - Click "Data" tab
+   - Click "Query" and paste contents of `backend/schema.sql`
+   - Execute the query
+
+6. **Generate Domain**
+   - Go to your app service → Settings → Networking
+   - Click "Generate Domain"
+   - Your app will be available at the generated URL!
+
+## Local Development
+
+### Prerequisites
+- Node.js 18+ installed
+- PostgreSQL installed and running
+- API keys for Resend and Google AI
+
+### Setup
+
+1. **Clone the repository**
+   ```bash
+   git clone YOUR_REPO_URL
+   cd book-companion
+   ```
+
+2. **Install dependencies**
+   ```bash
+   cd backend && npm install
+   cd ../frontend && npm install
+   ```
+
+3. **Set up environment variables**
+
+   Create `backend/.env`:
+   ```
+   DATABASE_URL=postgresql://localhost:5432/bookcompanion
+   JWT_SECRET=your-local-secret-key
+   RESEND_API_KEY=your-resend-api-key
+   RESEND_FROM_EMAIL=your-email@example.com
+   GOOGLE_API_KEY=your-google-api-key
+   NODE_ENV=development
+   PORT=3000
+   APP_URL=http://localhost:3000
+   ```
+
+4. **Create database and run schema**
+   ```bash
+   createdb bookcompanion
+   psql bookcompanion < backend/schema.sql
+   ```
+
+5. **Start development servers**
+
+   Terminal 1 (Backend):
+   ```bash
+   cd backend
+   node server.js
+   ```
+
+   Terminal 2 (Frontend):
+   ```bash
+   cd frontend
+   npm run dev
+   ```
+
+6. **Access the app**
+   - Frontend: http://localhost:5173
+   - Backend: http://localhost:3000
+
+## Getting API Keys
+
+### Resend (Email)
+1. Go to [resend.com](https://resend.com)
+2. Sign up for free account
+3. Verify a domain or use their test domain
+4. Get your API key from the dashboard
+
+### Google AI (Gemini)
+1. Go to [Google AI Studio](https://makersuite.google.com/app/apikey)
+2. Sign in with your Google account
+3. Create a new API key
+4. Copy the key for your environment variables
+
+## Project Structure
+
+```
+book-companion/
+├── frontend/
+│   ├── src/
+│   │   ├── BookCompanion.jsx   # Main React component
+│   │   ├── index.css            # Global styles
+│   │   └── main.jsx             # React entry point
+│   ├── index.html               # HTML template
+│   ├── package.json
+│   ├── vite.config.js
+│   ├── tailwind.config.js
+│   └── postcss.config.js
+├── backend/
+│   ├── server.js                # Express server
+│   ├── schema.sql               # Database schema
+│   └── package.json
+├── package.json                 # Root package.json
+├── nixpacks.toml               # Railway build config
+├── .env.example                # Environment template
+└── README.md
+```
+
+## Environment Variables Reference
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `DATABASE_URL` | PostgreSQL connection string | Yes |
+| `JWT_SECRET` | Secret key for JWT tokens | Yes |
+| `RESEND_API_KEY` | Resend email API key | Yes |
+| `RESEND_FROM_EMAIL` | Verified sender email | Yes |
+| `GOOGLE_API_KEY` | Google Gemini API key | Yes |
+| `NODE_ENV` | Environment (development/production) | Yes |
+| `PORT` | Server port (default: 3000) | No |
+| `APP_URL` | Full app URL for magic links | Yes |
+
+## Features in Detail
+
+### Magic Link Authentication
+Users enter their email and receive a secure magic link. Clicking the link automatically signs them in with no password required.
+
+### Author Research
+When starting a new conversation, the app uses Gemini AI with Google Search to research:
+- Main arguments and frameworks from the book
+- Author's background and communication style
+- Key quotes and principles
+- The book's impact and reception
+
+### AI Conversations
+The AI embodies the author's persona and adapts to different conversation modes:
+- **Exploration**: Asks thoughtful questions, draws connections
+- **Learning**: Explains clearly with book examples
+- **Application**: Provides practical guidance
+- **Questioning**: Engages intellectually, defends positions
+
+### Conversation Management
+- All conversations automatically saved to database
+- Access from any device with the same account
+- Beautiful iMessage-style list view with previews
+- Timestamps showing recency
+
+## Troubleshooting
+
+### Railway Build Fails
+- Check that all environment variables are set
+- Ensure `GOOGLE_API_KEY` and `RESEND_API_KEY` are valid
+- Check Railway build logs for specific errors
+
+### Database Connection Issues
+- Verify `DATABASE_URL` is set correctly
+- Ensure database schema has been run
+- Check Railway PostgreSQL service is running
+
+### Magic Links Not Sending
+- Verify `RESEND_API_KEY` is correct
+- Check `RESEND_FROM_EMAIL` is verified in Resend
+- Ensure `APP_URL` matches your Railway domain
+
+### AI Not Responding
+- Verify `GOOGLE_API_KEY` is valid
+- Check you haven't exceeded API quota
+- Look at backend logs for errors
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) file for details.
+MIT
 
----
+## Contributing
 
-## Support
-
-- **Issues**: [GitHub Issues](https://github.com/mattsallover/Book-Companion/issues)
-- **Documentation**: See [walkthrough.md](docs/walkthrough.md)
-- **Deployment Guide**: See [DEPLOYMENT.md](DEPLOYMENT.md)
-
----
-
-Built with ❤️ for readers who want to go deeper with their books.
+Contributions are welcome! Please feel free to submit a Pull Request.

@@ -1,11 +1,11 @@
 [phases.setup]
-nixPkgs = ["nodejs_20"]
+nixPkgs = ['nodejs_18']
 
 [phases.install]
-cmds = ["npm install --prefix backend"]
+cmds = ['npm install --prefix backend']
 
 [phases.build]
-cmds = ["npm run build --prefix frontend"]
+cmds = ['npm run build']
 
 [start]
-cmd = "npm run start:backend"
+cmd = 'npm start'

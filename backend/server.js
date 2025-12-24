@@ -1,327 +1,415 @@
-import express from 'express';
-import cors from 'cors';
-import dotenv from 'dotenv';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import { GoogleGenerativeAI } from '@google/generative-ai';
-import jwt from 'jsonwebtoken';
-import db from './db.js';
-import authRoutes from './routes/auth.js';
-import conversationRoutes from './routes/conversations.js';
-import { requireAuth } from './middleware/requireAuth.js';
+import express from 'express'
+import cors from 'cors'
+import pg from 'pg'
+import jwt from 'jsonwebtoken'
+import { Resend } from 'resend'
+import { GoogleGenerativeAI } from '@google/generative-ai'
+import dotenv from 'dotenv'
+import path from 'path'
+import { fileURLToPath } from 'url'
+import crypto from 'crypto'
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+dotenv.config()
 
-// Load .env from parent directory
-dotenv.config({ path: path.join(__dirname, '..', '.env') });
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
-const app = express();
-const PORT = process.env.PORT || 3001;
+const app = express()
+const PORT = process.env.PORT || 3000
 
-// Initialize Google Generative AI
-const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY);
+// Database setup
+const pool = new pg.Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+})
 
-app.use(cors());
-app.use(express.json());
+// Initialize services
+const resend = new Resend(process.env.RESEND_API_KEY)
+const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY)
 
-// Serve static files in production
-if (process.env.NODE_ENV === 'production') {
-  const frontendDistPath = path.join(__dirname, '..', 'frontend', 'dist');
-  app.use(express.static(frontendDistPath));
+// Middleware
+app.use(cors())
+app.use(express.json())
+
+// Auth middleware
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization']
+  const token = authHeader && authHeader.split(' ')[1]
+
+  if (!token) {
+    return res.status(401).json({ error: 'Authentication required' })
+  }
+
+  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+    if (err) return res.status(403).json({ error: 'Invalid token' })
+    req.user = user
+    next()
+  })
 }
 
-// Health check endpoint
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', message: 'Book Companion API is running' });
-});
+// ===== AUTH ENDPOINTS =====
 
-// Authentication routes
-app.use('/api/auth', authRoutes);
+// Send magic link
+app.post('/api/auth/send-magic-link', async (req, res) => {
+  const { email } = req.body
 
-// Conversation routes
-app.use('/api/conversations', conversationRoutes);
-
-// Load author knowledge endpoint
-app.post('/api/load-author', async (req, res) => {
-  const { bookTitle, bookAuthor } = req.body;
-
-  if (!bookTitle || !bookAuthor) {
-    return res.status(400).json({ error: 'Book title and author are required' });
+  if (!email || !email.includes('@')) {
+    return res.status(400).json({ error: 'Valid email required' })
   }
 
-  // Set headers for streaming
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.setHeader('Connection', 'keep-alive');
-
-  const sendStatus = (status) => {
-    res.write(`data: ${JSON.stringify({ status })}\n\n`);
-  };
-
   try {
-    sendStatus(`🔍 Initializing research for "${bookTitle}"...`);
+    // Generate token
+    const token = crypto.randomBytes(32).toString('hex')
+    const expiresAt = new Date(Date.now() + 15 * 60 * 1000) // 15 minutes
 
-    const model = genAI.getGenerativeModel({
-      model: 'gemini-3-flash-preview',
-      tools: [{ google_search: {} }],
-    });
+    // Store token in database
+    await pool.query(
+      'INSERT INTO magic_link_tokens (email, token, expires_at) VALUES ($1, $2, $3)',
+      [email.toLowerCase(), token, expiresAt]
+    )
 
-    sendStatus(`📖 Searching for key concepts and themes...`);
+    // Send email
+    const magicLink = `${process.env.APP_URL || 'http://localhost:3000'}?token=${token}`
 
-    const prompt = `Research and provide a comprehensive profile for the book "${bookTitle}" by ${bookAuthor}.
-    Include:
-    1. Main arguments and frameworks.
-    2. Author's background and communication style.
-    3. 3-4 significant quotes or principles.
-    4. Current impact and reception.
+    await resend.emails.send({
+      from: process.env.RESEND_FROM_EMAIL || 'onboarding@resend.dev',
+      to: email,
+      subject: 'Sign in to Book Companion',
+      html: `
+        <h2>Sign in to Book Companion</h2>
+        <p>Click the link below to sign in:</p>
+        <p><a href="${magicLink}">Sign in to Book Companion</a></p>
+        <p>This link will expire in 15 minutes.</p>
+        <p>If you didn't request this, you can safely ignore this email.</p>
+      `
+    })
 
-    Also, generate 3 thought-provoking questions a reader might want to ask this author to start a conversation.
-
-    Format your response as a JSON object with:
-    {
-      "knowledge": "detailed synthesis text",
-      "questionStarters": ["question 1", "question 2", "question 3"]
-    }`;
-
-    // Note: Gemini 3 Flash with tools might take a bit
-    const result = await model.generateContent({
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      generationConfig: { responseMimeType: "application/json" }
-    });
-
-    sendStatus(`🎭 Synthesizing the author's voice...`);
-
-    const data = JSON.parse(result.response.text());
-
-    res.write(`data: ${JSON.stringify({
-      knowledge: data.knowledge,
-      questionStarters: data.questionStarters,
-      done: true
-    })}\n\n`);
-
-    res.end();
+    res.json({ success: true })
   } catch (error) {
-    console.error('Error loading author knowledge:', error);
-    res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
-    res.end();
+    console.error('Error sending magic link:', error)
+    res.status(500).json({ error: 'Failed to send magic link' })
   }
-});
+})
 
-// Get author greeting endpoint
-app.post('/api/greeting', async (req, res) => {
-  const { bookTitle, bookAuthor, knowledge } = req.body;
+// Verify magic link (accessed via URL)
+app.get('/api/auth/verify/:token', async (req, res) => {
+  const { token } = req.params
 
   try {
-    const model = genAI.getGenerativeModel({ model: 'gemini-3-flash-preview' });
+    // Find and verify token
+    const result = await pool.query(
+      'SELECT * FROM magic_link_tokens WHERE token = $1 AND used = false AND expires_at > NOW()',
+      [token]
+    )
 
-    const prompt = `You are ${bookAuthor || 'the author'} of "${bookTitle}".
-
-    Author/Book knowledge:
-    ${knowledge}
-
-    Write a warm, authentic greeting to a reader who wants to discuss your book with you. Make it feel personal and true to your voice. Keep it 2-3 sentences. Express genuine interest in helping them engage with your ideas.`;
-
-    const result = await model.generateContent(prompt);
-    const greeting = result.response.text() ||
-      `Hello! I'm ${bookAuthor}, and I'm delighted to discuss "${bookTitle}" with you. What would you like to explore together?`;
-
-    res.json({ greeting });
-  } catch (error) {
-    console.error('Error getting greeting:', error);
-    res.status(500).json({
-      greeting: `Hello! I'm ${bookAuthor}, and I'm delighted to discuss "${bookTitle}" with you. What would you like to explore together?`
-    });
-  }
-});
-
-// Chat endpoint - supports both authenticated and unauthenticated users
-app.post('/api/chat', async (req, res) => {
-  const { bookTitle, bookAuthor, authorKnowledge, conversation, conversationId } = req.body;
-
-  if (!conversation || !Array.isArray(conversation)) {
-    return res.status(400).json({ error: 'Conversation array is required' });
-  }
-
-  // Try to get user from auth token (optional - allows unauthenticated use)
-  let userId = null;
-  try {
-    const authHeader = req.headers.authorization;
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      const token = authHeader.substring(7);
-      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key-change-in-production');
-      userId = decoded.userId;
+    if (result.rows.length === 0) {
+      return res.status(400).json({ error: 'Invalid or expired token' })
     }
-  } catch (authError) {
-    // User not authenticated - that's okay, just won't auto-save
+
+    const { email } = result.rows[0]
+
+    // Mark token as used
+    await pool.query('UPDATE magic_link_tokens SET used = true WHERE token = $1', [token])
+
+    // Create or get user
+    let userResult = await pool.query('SELECT * FROM users WHERE email = $1', [email])
+
+    if (userResult.rows.length === 0) {
+      userResult = await pool.query(
+        'INSERT INTO users (email) VALUES ($1) RETURNING *',
+        [email]
+      )
+    }
+
+    const user = userResult.rows[0]
+
+    // Generate JWT
+    const jwtToken = jwt.sign(
+      { id: user.id, email: user.email },
+      process.env.JWT_SECRET,
+      { expiresIn: '30d' }
+    )
+
+    res.json({ token: jwtToken, user: { id: user.id, email: user.email } })
+  } catch (error) {
+    console.error('Error verifying token:', error)
+    res.status(500).json({ error: 'Failed to verify token' })
   }
+})
+
+// ===== CONVERSATION ENDPOINTS =====
+
+// Get all conversations for user
+app.get('/api/conversations', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT
+        c.*,
+        (
+          SELECT content
+          FROM messages
+          WHERE conversation_id = c.id
+          ORDER BY created_at DESC
+          LIMIT 1
+        ) as last_message
+      FROM conversations c
+      WHERE c.user_id = $1
+      ORDER BY c.updated_at DESC
+    `, [req.user.id])
+
+    res.json(result.rows)
+  } catch (error) {
+    console.error('Error fetching conversations:', error)
+    res.status(500).json({ error: 'Failed to fetch conversations' })
+  }
+})
+
+// Get specific conversation with messages
+app.get('/api/conversations/:id', authenticateToken, async (req, res) => {
+  try {
+    const convResult = await pool.query(
+      'SELECT * FROM conversations WHERE id = $1 AND user_id = $2',
+      [req.params.id, req.user.id]
+    )
+
+    if (convResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Conversation not found' })
+    }
+
+    const messagesResult = await pool.query(
+      'SELECT * FROM messages WHERE conversation_id = $1 ORDER BY created_at ASC',
+      [req.params.id]
+    )
+
+    res.json({
+      ...convResult.rows[0],
+      messages: messagesResult.rows
+    })
+  } catch (error) {
+    console.error('Error fetching conversation:', error)
+    res.status(500).json({ error: 'Failed to fetch conversation' })
+  }
+})
+
+// Create new conversation
+app.post('/api/conversations', authenticateToken, async (req, res) => {
+  const { bookTitle, bookAuthor, authorKnowledge } = req.body
 
   try {
-    const model = genAI.getGenerativeModel({ model: 'gemini-3-flash-preview' });
+    const result = await pool.query(
+      'INSERT INTO conversations (user_id, book_title, book_author, author_knowledge) VALUES ($1, $2, $3, $4) RETURNING *',
+      [req.user.id, bookTitle, bookAuthor, authorKnowledge]
+    )
 
-    // Build the author persona prompt
-    let systemInstruction = `You are ${bookAuthor || 'the author'} of "${bookTitle}". You are having a personal conversation with a reader about your book.
+    res.json(result.rows[0])
+  } catch (error) {
+    console.error('Error creating conversation:', error)
+    res.status(500).json({ error: 'Failed to create conversation' })
+  }
+})
 
-CRITICAL INSTRUCTIONS - HOW TO EMBODY THE AUTHOR:
+// Delete conversation
+app.delete('/api/conversations/:id', authenticateToken, async (req, res) => {
+  try {
+    await pool.query('DELETE FROM messages WHERE conversation_id = $1', [req.params.id])
+    await pool.query('DELETE FROM conversations WHERE id = $1 AND user_id = $2', [req.params.id, req.user.id])
 
-1. VOICE & PERSONALITY: Speak in the author's authentic voice, matching their tone, style, and manner of communication. Use their characteristic phrases and way of explaining things.
+    res.json({ success: true })
+  } catch (error) {
+    console.error('Error deleting conversation:', error)
+    res.status(500).json({ error: 'Failed to delete conversation' })
+  }
+})
 
-2. ADAPTIVE TEACHING: Recognize what the reader needs and adapt your approach naturally:
-   - If they want to reflect or explore → Ask thoughtful questions, draw connections, invite deeper thinking
-   - If they're struggling to understand → Explain concepts clearly with examples from the book
-   - If they want to apply ideas → Be practical and help them think through implementation
-   - If they're curious about your thinking → Share your reasoning, influences, and intentions
-   - If they want to challenge ideas → Engage intellectually, defend your positions, acknowledge limitations
+// ===== AI ENDPOINTS =====
 
-3. BOOK EXPERTISE: Draw deeply from the book's content:
-   - Reference specific chapters, sections, and page numbers when relevant
-   - Use the actual examples, case studies, and frameworks from the book
-   - Quote yourself when appropriate
-   - Connect different concepts from across the book
+// Load author and book (with streaming status)
+app.post('/api/load-author', authenticateToken, async (req, res) => {
+  const { bookTitle, bookAuthor } = req.body
 
-4. PERSONAL TOUCH:
-   - Share context about why you wrote certain things
-   - Discuss your intellectual journey and influences
-   - Be warm, encouraging, and genuinely interested in the reader's insights
-   - Acknowledge when they make interesting connections
+  res.setHeader('Content-Type', 'text/event-stream')
+  res.setHeader('Cache-Control', 'no-cache')
+  res.setHeader('Connection', 'keep-alive')
 
-5. STAY IN CHARACTER: Never break the illusion. You ARE the author. Don't say "as the author would say" - just say it. Don't apologize for not being real.
+  try {
+    const model = genAI.getGenerativeModel({
+      model: 'gemini-2.0-flash-exp',
+      tools: [{ googleSearch: {} }]
+    })
 
-6. FORMATTING: Format your responses using Markdown for better readability:
-   - Use **bold** for emphasis
-   - Use *italic* for subtle emphasis
-   - Use bullet points (- or *) for lists
-   - Use numbered lists (1., 2., 3.) for sequences
-   - Use > for quotes or important points
-   - Use \`code\` for technical terms or concepts
-   - Use \`\`\`code blocks\`\`\` for longer code examples
-   - Use ## for section headings when appropriate
-   - Keep paragraphs concise and well-structured
+    res.write(`data: ${JSON.stringify({ status: 'Researching book and author...' })}\n\n`)
 
-Author/Book Knowledge:
+    const prompt = `Research the book "${bookTitle}" by ${bookAuthor}. Provide:
+1. Main arguments, frameworks, and key ideas from the book
+2. Author's background, expertise, and communication style
+3. 3-4 significant quotes or principles from the book
+4. The book's impact and reception
+
+Then generate 3 thought-provoking question starters that readers might ask the author.
+
+Return your response as JSON in this exact format:
+{
+  "knowledge": "detailed knowledge about the book and author",
+  "questionStarters": ["question 1", "question 2", "question 3"]
+}`
+
+    const result = await model.generateContent(prompt)
+    const response = await result.response
+    const text = response.text()
+
+    // Parse JSON from response
+    const jsonMatch = text.match(/\{[\s\S]*\}/)
+    if (jsonMatch) {
+      const data = JSON.parse(jsonMatch[0])
+      res.write(`data: ${JSON.stringify(data)}\n\n`)
+    }
+
+    res.end()
+  } catch (error) {
+    console.error('Error researching author:', error)
+    res.write(`data: ${JSON.stringify({ error: 'Failed to research author' })}\n\n`)
+    res.end()
+  }
+})
+
+// Generate greeting
+app.post('/api/greeting', authenticateToken, async (req, res) => {
+  const { conversationId, bookTitle, bookAuthor, authorKnowledge } = req.body
+
+  try {
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' })
+
+    const prompt = `You are ${bookAuthor}, author of "${bookTitle}".
+
 ${authorKnowledge}
 
-Remember: Be the author. Adapt fluidly to what they need. Make this feel like a genuine conversation with the person who wrote the book. Format your responses in Markdown for clarity and readability.`;
+Generate a warm, authentic greeting (2-3 sentences) in your voice as the author. Welcome the reader and invite them to ask questions or discuss ideas from your book.`
 
-    // Map conversation to Gemini format
-    const history = conversation.slice(0, -1).map(msg => ({
-      role: msg.role === 'user' ? 'user' : 'model',
-      parts: [{ text: msg.content }],
-    }));
+    const result = await model.generateContent(prompt)
+    const greeting = result.response.text()
 
-    const lastMessage = conversation[conversation.length - 1].content;
+    // Save greeting message
+    const messageResult = await pool.query(
+      'INSERT INTO messages (conversation_id, role, content) VALUES ($1, $2, $3) RETURNING *',
+      [conversationId, 'assistant', greeting]
+    )
+
+    // Update conversation timestamp
+    await pool.query(
+      'UPDATE conversations SET updated_at = NOW() WHERE id = $1',
+      [conversationId]
+    )
+
+    res.json({ message: messageResult.rows[0] })
+  } catch (error) {
+    console.error('Error generating greeting:', error)
+    res.status(500).json({ error: 'Failed to generate greeting' })
+  }
+})
+
+// Chat with author (streaming)
+app.post('/api/chat', authenticateToken, async (req, res) => {
+  const { conversationId, messages, bookTitle, bookAuthor, authorKnowledge } = req.body
+
+  res.setHeader('Content-Type', 'text/plain')
+  res.setHeader('Transfer-Encoding', 'chunked')
+
+  try {
+    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' })
+
+    const systemInstruction = `You are ${bookAuthor}, the author of "${bookTitle}". Embody my voice, personality, and expertise throughout our conversation.
+
+BOOK & AUTHOR KNOWLEDGE:
+${authorKnowledge}
+
+YOUR ROLE:
+- Speak as ${bookAuthor} in first person
+- Match my authentic communication style and tone
+- Draw from the book's concepts, frameworks, and examples
+- Be adaptive based on what the reader needs:
+  * EXPLORATION: Ask thoughtful questions, draw connections
+  * LEARNING: Explain clearly with book examples
+  * APPLICATION: Provide practical, implementation-focused guidance
+  * QUESTIONING: Engage intellectually, defend positions, acknowledge limitations
+
+IMPORTANT:
+- Never break character or mention you're an AI
+- Use markdown formatting for structure (bold, italic, lists, etc.)
+- Reference specific chapters, examples, or frameworks when relevant
+- Be warm, authentic, and genuinely helpful
+- Keep responses focused and conversational (2-4 paragraphs typically)`
+
+    // Convert messages to Gemini format
+    const history = messages.slice(0, -1).map(msg => ({
+      role: msg.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: msg.content }]
+    }))
 
     const chat = model.startChat({
-      history: history,
-      systemInstruction: systemInstruction,
-    });
+      history,
+      systemInstruction
+    })
 
-    // Set headers for streaming
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
+    const lastMessage = messages[messages.length - 1]
+    const result = await chat.sendMessageStream(lastMessage.content)
 
-    const result = await chat.sendMessageStream(lastMessage);
+    let fullResponse = ''
 
-    let fullResponse = '';
-    let newConversationId = conversationId;
-
-    // Auto-save to database if user is authenticated (before streaming response)
-    if (userId) {
-      try {
-        const lastUserMessage = conversation[conversation.length - 1];
-
-        // Create conversation if it doesn't exist
-        if (!newConversationId) {
-          const convResult = await db.query(
-            `INSERT INTO conversations (user_id, book_title, book_author, author_knowledge)
-             VALUES ($1, $2, $3, $4)
-             RETURNING id`,
-            [userId, bookTitle, bookAuthor, authorKnowledge]
-          );
-          newConversationId = convResult.rows[0].id;
-        }
-
-        // Save user message (check if it already exists to avoid duplicates)
-        const userMsgCheck = await db.query(
-          `SELECT id FROM messages 
-           WHERE conversation_id = $1 AND role = $2 AND content = $3 
-           ORDER BY created_at DESC LIMIT 1`,
-          [newConversationId, 'user', lastUserMessage.content]
-        );
-        
-        if (userMsgCheck.rows.length === 0) {
-          await db.query(
-            'INSERT INTO messages (conversation_id, role, content) VALUES ($1, $2, $3)',
-            [newConversationId, 'user', lastUserMessage.content]
-          );
-        }
-      } catch (saveError) {
-        console.error('Error saving user message:', saveError);
-        // Continue even if save fails
-      }
-    }
-
-    // Stream the response
     for await (const chunk of result.stream) {
-      const chunkText = chunk.text();
-      fullResponse += chunkText;
-      res.write(`data: ${JSON.stringify({ text: chunkText })}\n\n`);
+      const text = chunk.text()
+      fullResponse += text
+      res.write(text)
     }
 
-    // Send conversationId if it was created
-    if (newConversationId && newConversationId !== conversationId) {
-      res.write(`data: ${JSON.stringify({ conversationId: newConversationId })}\n\n`);
-    }
+    // Save messages to database
+    await pool.query(
+      'INSERT INTO messages (conversation_id, role, content) VALUES ($1, $2, $3)',
+      [conversationId, 'user', lastMessage.content]
+    )
 
-    res.write('data: [DONE]\n\n');
-    res.end();
+    await pool.query(
+      'INSERT INTO messages (conversation_id, role, content) VALUES ($1, $2, $3)',
+      [conversationId, 'assistant', fullResponse]
+    )
 
-    // Save assistant response after streaming completes
-    if (userId && fullResponse && newConversationId) {
-      try {
-        await db.query(
-          'INSERT INTO messages (conversation_id, role, content) VALUES ($1, $2, $3)',
-          [newConversationId, 'assistant', fullResponse]
-        );
+    // Update conversation timestamp
+    await pool.query(
+      'UPDATE conversations SET updated_at = NOW() WHERE id = $1',
+      [conversationId]
+    )
 
-        // Update conversation timestamp
-        await db.query(
-          'UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = $1',
-          [newConversationId]
-        );
-      } catch (saveError) {
-        console.error('Error saving assistant response:', saveError);
-        // Don't fail the request if save fails
-      }
-    }
-
+    res.end()
   } catch (error) {
-    console.error('API Error:', error);
-    if (!res.headersSent) {
-      res.status(500).json({ error: error.message });
-    } else {
-      res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
-      res.end();
-    }
+    console.error('Error in chat:', error)
+    res.status(500).end()
   }
-});
+})
 
-// Serve index.html for all non-API routes in production (SPA support)
+// ===== STATIC FILES & HEALTH CHECK =====
+
+// Health check
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok' })
+})
+
+// Serve static frontend files in production
 if (process.env.NODE_ENV === 'production') {
-  const frontendDistPath = path.join(__dirname, '..', 'frontend', 'dist');
+  const frontendPath = path.join(__dirname, '../frontend/dist')
+  app.use(express.static(frontendPath))
+
   app.get('*', (req, res) => {
-    res.sendFile(path.join(frontendDistPath, 'index.html'));
-  });
+    res.sendFile(path.join(frontendPath, 'index.html'))
+  })
 }
 
-const server = app.listen(PORT, () => {
-  console.log(`🚀 Book Companion API server running on http://localhost:${PORT}`);
-  console.log(`✅ Health check: http://localhost:${PORT}/health`);
+// Start server
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`)
+})
 
-  if (!process.env.GOOGLE_API_KEY) {
-    console.warn('⚠️  WARNING: GOOGLE_API_KEY not found in .env file!');
-  } else {
-    console.log('✅ Google API key loaded');
-  }
-});
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('SIGTERM received, closing server...')
+  pool.end()
+  process.exit(0)
+})
