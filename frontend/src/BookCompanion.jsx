@@ -103,12 +103,26 @@ function BookCompanion() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
+  // Handle 403 errors by signing out
+  const handleAuthError = () => {
+    localStorage.removeItem('token')
+    setIsAuthenticated(false)
+    setShowAuthModal(true)
+    setConversations([])
+    setCurrentConversation(null)
+    setMessages([])
+  }
+
   // Load conversations
   const loadConversations = async () => {
     try {
       const response = await fetch(`${API_URL}/api/conversations`, {
         headers: { 'Authorization': `Bearer ${getToken()}` }
       })
+      if (response.status === 403) {
+        handleAuthError()
+        return
+      }
       if (response.ok) {
         const data = await response.json()
         setConversations(data)
@@ -171,6 +185,11 @@ function BookCompanion() {
         },
         body: JSON.stringify({ bookTitle, bookAuthor })
       })
+
+      if (response.status === 403) {
+        handleAuthError()
+        return
+      }
 
       const reader = response.body.getReader()
       const decoder = new TextDecoder()
@@ -264,6 +283,11 @@ function BookCompanion() {
         headers: { 'Authorization': `Bearer ${getToken()}` }
       })
 
+      if (response.status === 403) {
+        handleAuthError()
+        return
+      }
+
       if (response.ok) {
         setConversations(conversations.filter(c => c.id !== convId))
         setSwipedConvId(null)
@@ -279,6 +303,11 @@ function BookCompanion() {
       const response = await fetch(`${API_URL}/api/conversations/${conversation.id}`, {
         headers: { 'Authorization': `Bearer ${getToken()}` }
       })
+
+      if (response.status === 403) {
+        handleAuthError()
+        return
+      }
 
       if (response.ok) {
         const data = await response.json()
@@ -318,6 +347,11 @@ function BookCompanion() {
           authorKnowledge
         })
       })
+
+      if (response.status === 403) {
+        handleAuthError()
+        return
+      }
 
       const reader = response.body.getReader()
       const decoder = new TextDecoder()
