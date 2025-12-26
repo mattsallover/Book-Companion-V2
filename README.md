@@ -118,8 +118,8 @@ You'll need:
 
 **1. Clone the repository**
 ```bash
-git clone https://github.com/yourusername/book-companion-v2.git
-cd book-companion-v2
+git clone https://github.com/mattsallover/Book-Companion-V2.git
+cd Book-Companion-V2
 ```
 
 **2. Install dependencies**
@@ -181,7 +181,7 @@ The easiest way to deploy Book Companion is using [Railway](https://railway.app)
    git init
    git add .
    git commit -m "Initial commit"
-   git remote add origin YOUR_GITHUB_REPO_URL
+   git remote add origin https://github.com/mattsallover/Book-Companion-V2.git
    git push -u origin main
    ```
 
@@ -382,6 +382,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ### Built with ❤️ for readers who want to go deeper
 
-**[⭐ Star this repo](https://github.com/yourusername/book-companion-v2)** if you find it useful!
+**[⭐ Star this repo](https://github.com/mattsallover/Book-Companion-V2)** if you find it useful!
 
 </div>
