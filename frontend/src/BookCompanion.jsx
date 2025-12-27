@@ -76,7 +76,6 @@ function BookCompanion() {
   const [isLoading, setIsLoading] = useState(false)
   const [view, setView] = useState('list') // 'list' | 'chat'
   const [searchQuery, setSearchQuery] = useState('')
-  const [swipedConvId, setSwipedConvId] = useState(null)
 
   const [showBookModal, setShowBookModal] = useState(false)
   const [bookTitle, setBookTitle] = useState('')
@@ -584,13 +583,9 @@ function BookCompanion() {
             </div>
           ) : (
             filteredConversations.map((conv) => (
-              <div key={conv.id} className="relative">
+              <div key={conv.id} className="relative group">
                 <button
                   onClick={() => loadConversation(conv)}
-                  onContextMenu={(e) => {
-                    e.preventDefault()
-                    setSwipedConvId(swipedConvId === conv.id ? null : conv.id)
-                  }}
                   className="w-full bg-white border-b border-gray-200 px-4 py-3 flex items-center space-x-3 hover:bg-gray-50 ios-button text-left"
                 >
                 {/* Avatar */}
@@ -618,15 +613,19 @@ function BookCompanion() {
                 </div>
               </button>
 
-              {/* Delete button (shows on long-press/right-click) */}
-              {swipedConvId === conv.id && (
-                <button
-                  onClick={() => deleteConversation(conv.id)}
-                  className="absolute right-4 top-1/2 transform -translate-y-1/2 bg-red-500 text-white px-4 py-2 rounded-lg font-medium text-sm ios-button"
-                >
-                  Delete
-                </button>
-              )}
+              {/* Delete button (always visible) */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  deleteConversation(conv.id)
+                }}
+                className="absolute right-2 top-1/2 transform -translate-y-1/2 p-2 text-red-500 hover:bg-red-50 rounded-full transition-colors"
+                title="Delete conversation"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+              </button>
             </div>
             ))
           )}
