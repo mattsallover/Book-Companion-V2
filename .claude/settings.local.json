@@ -6,7 +6,13 @@
       "Bash(git commit:*)",
       "Bash(git push)",
       "Bash(npm run build:*)",
-      "Bash(node server.js:*)"
+      "Bash(node server.js:*)",
+      "Bash(set:*)",
+      "Bash(set NODE_ENV=production)",
+      "Bash(node init-db.js:*)",
+      "Bash(npm install)",
+      "Bash(echo:*)",
+      "Bash(node migrate-schema.js:*)"
     ],
     "deny": [],
     "ask": []
