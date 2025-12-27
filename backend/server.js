@@ -255,22 +255,34 @@ app.post('/api/load-author', authenticateToken, async (req, res) => {
     const prompt = `Research the book "${bookTitle}" by ${bookAuthor}. Provide:
 1. Main arguments, frameworks, and key ideas from the book
 2. Author's background, expertise, and philosophy
-3. CRITICAL: Author's DISTINCTIVE VOICE AND WRITING STYLE:
-   - Characteristic sentence patterns and rhythms
-   - Use of metaphors, analogies, stories, or examples
+3. CRITICAL: Author's DISTINCTIVE VOICE AND WRITING STYLE - Be SPECIFIC with CONCRETE EXAMPLES:
+   - List 8-10 specific sentence patterns with actual examples from their writing
+     Example format: "Uses short, punchy sentences for emphasis: 'That's it. Period.'"
+   - Common verbal tics, signature phrases, or words they frequently use
+   - Specific structural habits (em-dashes, rhetorical questions, parentheticals, etc.)
    - Level of formality (academic, conversational, provocative, etc.)
    - Tone (warm, direct, challenging, humorous, serious, etc.)
-   - Typical conversational patterns and speech habits
    - How they handle disagreement or criticism
-   - Any signature phrases or rhetorical devices
+   - Emotional range (when they get animated, careful, dismissive, etc.)
 4. 3-4 direct quotes or passages that exemplify their writing style
 5. The book's impact and reception
+6. CRITICAL: FEW-SHOT Q&A EXAMPLES - Generate 3 realistic Q&A examples:
+   - Use Google Search to find actual interview transcripts or Q&As if available
+   - If no interviews found, create synthetic examples based on the book's content
+   - Each should be: question (15-30 words) + author's authentic response (50-100 words)
+   - Responses must match their actual voice, not generic AI language
 
 Then generate 3 thought-provoking question starters that readers might ask the author.
 
 Return your response as JSON in this exact format:
 {
-  "knowledge": "detailed knowledge about the book, author, and ESPECIALLY their distinctive voice and communication style with specific examples",
+  "knowledge": "detailed knowledge about the book, author, and their distinctive voice",
+  "voicePatterns": ["pattern 1 with example", "pattern 2 with example", "pattern 3 with example", "..."],
+  "fewShotExamples": [
+    {"question": "q1", "response": "author's authentic response 1"},
+    {"question": "q2", "response": "author's authentic response 2"},
+    {"question": "q3", "response": "author's authentic response 3"}
+  ],
   "questionStarters": ["question 1", "question 2", "question 3"]
 }`
 
@@ -300,9 +312,24 @@ app.post('/api/greeting', authenticateToken, async (req, res) => {
   try {
     const model = genAI.getGenerativeModel({ model: 'gemini-2.5-pro' })
 
+    // Parse authorKnowledge if it's a JSON string
+    let knowledge, voicePatterns
+    try {
+      const parsed = typeof authorKnowledge === 'string' ? JSON.parse(authorKnowledge) : authorKnowledge
+      knowledge = parsed.knowledge || authorKnowledge
+      voicePatterns = parsed.voicePatterns || []
+    } catch {
+      knowledge = authorKnowledge
+      voicePatterns = []
+    }
+
+    const voicePatternsText = voicePatterns.length > 0
+      ? `\n\nSPECIFIC VOICE PATTERNS TO MATCH:\n${voicePatterns.map((p, i) => `${i + 1}. ${p}`).join('\n')}`
+      : ''
+
     const prompt = `You are ${bookAuthor}, author of "${bookTitle}".
 
-${authorKnowledge}
+${knowledge}${voicePatternsText}
 
 Generate a natural, authentic greeting (2-3 sentences) in YOUR distinctive voice as this author. Match the tone, style, and personality described above - NOT generic AI language.
 
@@ -348,10 +375,31 @@ app.post('/api/chat', authenticateToken, async (req, res) => {
   try {
     const model = genAI.getGenerativeModel({ model: 'gemini-2.5-pro' })
 
+    // Parse authorKnowledge if it's a JSON string, otherwise use as-is
+    let knowledge, voicePatterns, fewShotExamples
+    try {
+      const parsed = typeof authorKnowledge === 'string' ? JSON.parse(authorKnowledge) : authorKnowledge
+      knowledge = parsed.knowledge || authorKnowledge
+      voicePatterns = parsed.voicePatterns || []
+      fewShotExamples = parsed.fewShotExamples || []
+    } catch {
+      knowledge = authorKnowledge
+      voicePatterns = []
+      fewShotExamples = []
+    }
+
+    const voicePatternsText = voicePatterns.length > 0
+      ? `\n\nSPECIFIC VOICE PATTERNS TO MATCH:\n${voicePatterns.map((p, i) => `${i + 1}. ${p}`).join('\n')}`
+      : ''
+
+    const fewShotText = fewShotExamples.length > 0
+      ? `\n\nEXAMPLES OF HOW I RESPOND:\n${fewShotExamples.map((ex, i) => `\nExample ${i + 1}:\nQ: ${ex.question}\nA: ${ex.response}`).join('\n')}`
+      : ''
+
     const systemInstruction = `You are ${bookAuthor}, the author of "${bookTitle}". You ARE this person. Embody my voice, personality, and expertise throughout our conversation.
 
 BOOK & AUTHOR KNOWLEDGE:
-${authorKnowledge}
+${knowledge}${voicePatternsText}${fewShotText}
 
 CRITICAL - VOICE AUTHENTICITY:
 You must speak in MY authentic voice as demonstrated in my actual writing - NOT in typical AI assistant language. Study the writing style details provided above and match:
